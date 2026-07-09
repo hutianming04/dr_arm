@@ -14,13 +14,14 @@ static inline float clamp(float val, float min_val, float max_val)
 /**
  * @brief  阻抗控制器初始化
  */
-void Impedance_Init(Impedance_TypeDef *imp, float Kp, float Kd,
+void Impedance_Init(Impedance_TypeDef *imp, float Kp, float Kd,float kf,
                     float out_max, float out_min)
 {
     memset(imp, 0, sizeof(Impedance_TypeDef));
 
     imp->Kp      = Kp;
     imp->Kd      = Kd;
+    imp->kf     = kf;
     imp->out_max = out_max;
     imp->out_min = out_min;
 }
@@ -51,9 +52,10 @@ float Impedance_Update(Impedance_TypeDef *imp,
 
     /* === 阻尼项 === */
     imp->damp_out   = imp->Kd * (vel - vel_);
-
+    /* === 前馈项 === */
+    imp->kf_out     = imp->kf * t_ff;
     /* === 合成输出 === */
-    imp->out = imp->spring_out + t_ff + imp->damp_out;
+    imp->out = imp->spring_out + imp->kf_out + imp->damp_out;
     imp->out = clamp(imp->out, imp->out_min, imp->out_max);
 
     return imp->out;

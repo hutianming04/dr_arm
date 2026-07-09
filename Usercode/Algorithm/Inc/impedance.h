@@ -22,7 +22,7 @@ typedef struct
     /* ---- 参数 ---- */
     float Kp;               /* 刚度系数 (stiffness)，N·m/° 或 N·m/rad */
     float Kd;               /* 阻尼系数 (damping)，N·m/(°/s) 或 N·m/(rad/s) */
-
+    float kf;               /* 前馈系数 (feedforward)，N·m/(°/s) 或 N·m/(rad/s) */
     /* ---- 限幅 ---- */
     float out_max;          /* 输出上限 */
     float out_min;          /* 输出下限 */
@@ -31,6 +31,7 @@ typedef struct
     float out;              /* 当前输出扭矩 */
     float spring_out;       /* 弹簧项 = Kp*(pos - pos_) */
     float damp_out;         /* 阻尼项 = Kd*(vel - vel_) */
+    float kf_out;           /* 前馈项 = kf * t_ff */
 } Impedance_TypeDef;
 
 /**
@@ -38,10 +39,11 @@ typedef struct
  * @param  imp      阻抗控制结构体指针
  * @param  Kp       刚度系数
  * @param  Kd       阻尼系数
+ * @param  kf       前馈系数
  * @param  out_max  输出上限
  * @param  out_min  输出下限
  */
-void Impedance_Init(Impedance_TypeDef *imp, float Kp, float Kd,
+void Impedance_Init(Impedance_TypeDef *imp, float Kp, float Kd,float kf,
                     float out_max, float out_min);
 
 /**

@@ -30,8 +30,6 @@
 #include "ALLinit.h"
 #include "DrMotor.h"
 #include "pid.h"
-#include "impedance.h"
-#include "differentiator.h"
 #include "VOFA.h"
 #include <math.h>
 /* USER CODE END Includes */
@@ -43,7 +41,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+/* Ts = 1ms, alpha = 0.8 -> tau = Ts*(1-alpha)/alpha = 0.00025 */
+#define TAU_ALPHA_08  0.00025f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -54,10 +53,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-float target = 0.0f;              /* 全局目标角度 */
-//PID_TypeDef motor_pid;            /* 电机位置环 PID */
-Impedance_TypeDef motor_impedance;/* 阻抗控制器 */
-Differentiator_TypeDef target_diff; /* 目标位置微分器 → 期望速度 */
+float target = 0.0f;              /* 全局目标角度 (°) */
+PID_TypeDef pid_pos;              /* 外环: 位置 → 速度指令 (r/min) */
+PID_TypeDef pid_vel;              /* 内环: 速度 → 力矩指令 (Nm) */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,17 +106,23 @@ int main(void)
   /* USER CODE BEGIN 2 */
   User_Init();
 
-  /* 初始化位置环 PID: Kp=Ki=Kd=0, Ts=1ms, tau=0(不滤波), 输出±16384 */
-  //PID_Init(&motor_pid, 0.0f, 0.0f, 0.0f, 0.001f, 0.0f, 16384.0f, -16384.0f);
+  /* ── 外环: 位置 PID ──
+   *   setpoint: target (°),  feedback: motor_state[0][0] (°)
+   *   output:   速度指令 (r/min)
+   *   setpoint 不滤波, 微分误差滤波 alpha=0.8
+   */
+  PID_Init(&pid_pos, 20.0f, 0.0f, 0.0f, 0.001f,
+           0.0f, TAU_ALPHA_08,    /* tau_sp=0(不滤波), tau_d→alpha=0.8 */
+           3600.0f, -3600.0f);
 
-  /* 初始化阻抗控制器:
-   *   控制律: torque = Kp*(pos - pos_) + t_ff + Kd*(vel - vel_)
-   *     pos  = 虚拟期望位置,  pos_ = 实际位置反馈
-   *     vel  = 虚拟期望速度,  vel_ = 实际速度反馈      */
-  Impedance_Init(&motor_impedance, 0.0f, 0.0f, 36.0f, -36.0f);
-
-  /* 初始化微分器: Ts=1ms, tau=0.25ms → alpha=Ts/(Ts+tau)=0.8 */
-  Diff_Init(&target_diff, 0.001f, 0.00025f);
+  /* ── 内环: 速度 PID ──
+   *   setpoint: pid_pos.out (r/min),  feedback: motor_state[0][1] (r/min)
+   *   output:   力矩指令 (Nm)
+   *   setpoint 滤波 alpha=0.8, 微分误差滤波 alpha=0.8
+   */
+  PID_Init(&pid_vel, 1.0f, 0.0f, 0.02f, 0.001f,
+           TAU_ALPHA_08, 0.0f,  /* tau_sp→alpha=0.8, tau_d→alpha=0.8 */
+           3600.0f, -3600.0f);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -131,22 +135,20 @@ int main(void)
     if (motor_update_flag)
     {
         motor_update_flag = 0;
+        float t = (float)globe_time_ms * 0.001f; /* 秒 */
+        target = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
+        /* ── 串级 PID 控制 ── */
+        /* 外环: 位置 → 速度指令 */
+        float vel_cmd = PID_Update(&pid_pos, target, motor_state[0][0]);
 
+        /* 内环: 速度 → 力矩指令 */
+        float torque_cmd = PID_Update(&pid_vel, vel_cmd, motor_state[0][1]);
 
-        /* ── 控制计算 ── */
-        float t = globe_time_ms * 0.001f;
-        float target_vel = Diff_Update(&target_diff, target);
-        //motor_update_infinite_angle(&motor.data, motor_state[0][0]);
-       // motor.data.vel = motor_state[0][1];
-        //motor.data.aim   = target;
-        //motor.data.error = target - motor_state[0][0];
-        float torque_cmd = Impedance_Update(&motor_impedance,
-            target, motor_state[0][0], target_vel, target_vel, 0.0f);
-        set_torque(1, torque_cmd,0.0f, 1);
+        set_torque(1, torque_cmd, 0.0f, 1);
 
         VOFA_justfloat(target, motor_state[0][0],
                        motor_state[0][1], torque_cmd,
-                       0, 0, 0, 0, 0, 0);
+                       vel_cmd, 0, 0, 0, 0, 0);
     }
   }
   /* USER CODE END 3 */

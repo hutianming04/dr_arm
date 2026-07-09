@@ -1,6 +1,7 @@
 
 
 GraphedExpression="globe_time_ms", DisplayFormat=DISPLAY_FORMAT_DEC, Color=#e56a6f, Show=0
+OpenDocument="pid.c", FilePath="d:/smartcar/dr_arm/Usercode/Algorithm/pid.c", Line=51
 OpenDocument="startup_stm32f103xb.s", FilePath="d:/smartcar/dr_arm/MDK-ARM/startup_stm32f103xb.s", Line=123
 OpenDocument="can.c", FilePath="d:/smartcar/dr_arm/Core/Src/can.c", Line=33
 OpenDocument="star.c", FilePath="d:/smartcar/dr_arm/Usercode/Star/star.c", Line=14
@@ -15,8 +16,9 @@ OpenDocument="dma.c", FilePath="d:/smartcar/dr_arm/Core/Src/dma.c", Line=7
 OpenDocument="VOFA.c", FilePath="d:/smartcar/dr_arm/Usercode/Bsp/VOFA.c", Line=0
 OpenToolbar="Debug", Floating=0, x=0, y=0
 OpenWindow="Source Files", DockArea=LEFT, x=0, y=0, w=444, h=607, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
-OpenWindow="Global Data", DockArea=RIGHT, x=0, y=1, w=588, h=302, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
-OpenWindow="Watched Data 1", DockArea=RIGHT, x=0, y=0, w=588, h=304, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Disassembly", DockArea=RIGHT, x=0, y=0, w=588, h=161, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Global Data", DockArea=RIGHT, x=0, y=2, w=588, h=221, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Watched Data 1", DockArea=RIGHT, x=0, y=1, w=588, h=223, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 OpenWindow="Data Sampling", DockArea=BOTTOM, x=0, y=0, w=264, h=317, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0, VisibleTab=0, UniformSampleSpacing=0
 OpenWindow="Console", DockArea=BOTTOM, x=1, y=0, w=1655, h=317, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 SmartViewPlugin="", Page="", Toolbar="Hidden", Window="SmartView 1"
@@ -36,8 +38,9 @@ WatchedExpression="target", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Win
 WatchedExpression="motor_state", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Window=Watched Data 1
 WatchedExpression="can_id", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Window=Watched Data 1
 WatchedExpression="READ_FLAG", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Window=Watched Data 1
-WatchedExpression="motor_impedance", Window=Watched Data 1
 WatchedExpression="huart1", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="rx_buffer", RefreshRate=5, Window=Watched Data 1
 WatchedExpression=" hcan", Window=Watched Data 1
 WatchedExpression="reply_state_error", RefreshRate=5, Window=Watched Data 1
+WatchedExpression="pid_pos", Window=Watched Data 1
+WatchedExpression="pid_vel", Window=Watched Data 1

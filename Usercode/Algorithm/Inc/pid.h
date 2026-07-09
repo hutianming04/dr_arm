@@ -16,7 +16,8 @@ typedef struct
     float Ki;               /* 积分系数 */
     float Kd;               /* 微分系数 */
     float Ts;               /* 采样周期 (s) */
-    float tau;              /* 微分滤波系数 (s)，0 = 不滤波 */
+    float tau_sp;           /* setpoint 滤波时间常数 (s)，0 = 不滤波 */
+    float tau_d;            /* 微分误差滤波时间常数 (s)，0 = 不滤波 */
 
     /* ---- 限幅 ---- */
     float out_max;          /* 输出上限 */
@@ -25,7 +26,8 @@ typedef struct
     float int_min;          /* 积分累加下限 */
 
     /* ---- 滤波器 ---- */
-    LowPassFilter_TypeDef d_filter;  /* 微分项一阶低通滤波器 */
+    LowPassFilter_TypeDef sp_filter;  /* setpoint 一阶低通滤波器 */
+    LowPassFilter_TypeDef d_filter;   /* 微分项误差一阶低通滤波器 */
 
     /* ---- 状态 ---- */
     float integral;         /* 积分累加值 */
@@ -40,22 +42,24 @@ typedef struct
 
 /**
  * @brief  PID 初始化
- * @param  pid    PID 结构体指针
- * @param  Kp     比例系数
- * @param  Ki     积分系数
- * @param  Kd     微分系数
- * @param  Ts     采样周期 (s)
- * @param  tau    微分滤波时间常数 (s)，0 = 不滤波
+ * @param  pid     PID 结构体指针
+ * @param  Kp      比例系数
+ * @param  Ki      积分系数
+ * @param  Kd      微分系数
+ * @param  Ts      采样周期 (s)
+ * @param  tau_sp  setpoint 滤波时间常数 (s)，0 = 不滤波
+ * @param  tau_d   微分误差滤波时间常数 (s)，0 = 不滤波
  * @param  out_max 输出上限
  * @param  out_min 输出下限
  */
 void PID_Init(PID_TypeDef *pid, float Kp, float Ki, float Kd,
-              float Ts, float tau, float out_max, float out_min);
+              float Ts, float tau_sp, float tau_d, float out_max, float out_min);
 
 /**
  * @brief  PID 计算（位置式）
+ * @note   微分项先对 error 做一阶低通滤波，再计算差分
  * @param  pid       PID 结构体指针
- * @param  setpoint  目标值
+ * @param  setpoint  目标值（会经过 sp_filter 低通滤波）
  * @param  feedback  反馈值
  * @return 计算结果
  */
@@ -77,7 +81,7 @@ void PID_SetOutLimit(PID_TypeDef *pid, float out_max, float out_min);
 void PID_SetIntLimit(PID_TypeDef *pid, float int_max, float int_min);
 
 /**
- * @brief  在线修改 PID 参数
+ * @brief  在线修改 PID 参数 (Kp, Ki, Kd)
  */
 void PID_SetParam(PID_TypeDef *pid, float Kp, float Ki, float Kd);
 
