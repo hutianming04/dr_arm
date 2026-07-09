@@ -111,11 +111,11 @@ int main(void)
   /* 初始化位置环 PID: Kp=Ki=Kd=0, Ts=1ms, tau=0(不滤波), 输出±16384 */
   //PID_Init(&motor_pid, 0.0f, 0.0f, 0.0f, 0.001f, 0.0f, 16384.0f, -16384.0f);
 
-  /* 初始化阻抗控制器: 
+  /* 初始化阻抗控制器:
    *   控制律: torque = Kp*(pos - pos_) + t_ff + Kd*(vel - vel_)
    *     pos  = 虚拟期望位置,  pos_ = 实际位置反馈
    *     vel  = 虚拟期望速度,  vel_ = 实际速度反馈      */
-  Impedance_Init(&motor_impedance, 0.0f, 0.00f, 36.0f, -36.0f);
+  Impedance_Init(&motor_impedance, 0.0f, 0.0f, 36.0f, -36.0f);
 
   /* 初始化微分器: Ts=1ms, tau=0.25ms → alpha=Ts/(Ts+tau)=0.8 */
   Diff_Init(&target_diff, 0.001f, 0.00025f);
@@ -123,7 +123,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  static uint8_t query_toggle = 0;
   while (1)
   {
     /* USER CODE END WHILE */
@@ -133,35 +132,19 @@ int main(void)
     {
         motor_update_flag = 0;
 
-        /* 更新目标轨迹 */
-        float t = globe_time_ms * 0.001f;          /* ms → s */
-        //target = 180.0f * sinf(1.4f * t);          /* 虚拟期望位置, ±180°, 周期≈4.5s */
-        float target_vel = Diff_Update(&target_diff, target); /* 微分器求期望速度 (°/s) */
 
-        /* ── 更新电机数据 & 多圈解算 (使用上周期 ISR 更新的 motor_state) ── */
-        motor_update_infinite_angle(&motor.data, motor_state[0][0]);
-        motor.data.vel = motor_state[0][1]; /* r/min */
-
-        /* ── 阻抗控制器 → 力矩指令 ── */
-        motor.data.aim   = target;
-        motor.data.error = target - motor.data.angle_infinite;
+        /* ── 控制计算 ── */
+        float t = globe_time_ms * 0.001f;
+        float target_vel = Diff_Update(&target_diff, target);
+        //motor_update_infinite_angle(&motor.data, motor_state[0][0]);
+       // motor.data.vel = motor_state[0][1];
+        //motor.data.aim   = target;
+        //motor.data.error = target - motor_state[0][0];
         float torque_cmd = Impedance_Update(&motor_impedance,
-            target,                        /* pos  — 虚拟期望位置 */
-            motor.data.angle_infinite,     /* pos_ — 实际位置反馈 */
-            target_vel,                    /* vel  — 虚拟期望速度 (°/s) */
-            motor.data.vel,                /* vel_ — 实际速度反馈 (r/min) */
-            0.0f);                         /* t_ff — 前馈力矩 */
+            target, motor_state[0][0], target_vel, target_vel, 0.0f);
+        set_torque(1, torque_cmd,0.0f, 1);
 
-        /* ── 1. 先查状态 @500Hz (query 先发, state 回复先到, ACK 后到) ── */
-        query_toggle = !query_toggle;
-        if (query_toggle)
-            query_state_async(1);    /* 设 state_pending=1, 非阻塞发送 0x1E */
-
-        /* ── 2. 再发扭矩指令 (ACK 后到, ISR 里 state_pending 已清零 → 跳过) ── */
-        set_torque_cmd(1, torque_cmd);              /* id=1, 非阻塞力矩发送 */
-
-        /* VOFA+ 上位机波形: 期望位置 vs 实际位置 */
-        VOFA_justfloat(target, motor.data.angle_infinite,
+        VOFA_justfloat(target, motor_state[0][0],
                        motor_state[0][1], torque_cmd,
                        0, 0, 0, 0, 0, 0);
     }

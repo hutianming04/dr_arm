@@ -16,7 +16,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "star.h"
 #include "ALLinit.h"
-#include "DrMotor.h"
 
 /* Private variables ---------------------------------------------------------*/
 
@@ -30,21 +29,10 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     CAN_RxHeaderTypeDef RxHeader;
 
-    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, (uint8_t *)rx_buffer) == HAL_OK)
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader,rx_buffer) == HAL_OK)
     {
-        can_id = RxHeader.StdId;
-
-        if (state_pending)
-        {
-            /* 状态查询回复 → 直接解码 */
-            motor_state_update_from_isr(can_id, (const uint8_t *)rx_buffer);
-            state_pending = 0;
-        }
-        else
-        {
-            /* ACK 等其他消息 → 跳过, 不污染 motor_state */
-            READ_FLAG = 1;
-        }
+        can_id    = RxHeader.StdId;
+        READ_FLAG = 1;
     }
 }
 
@@ -58,7 +46,7 @@ void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     CAN_RxHeaderTypeDef RxHeader;
 
-    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO1, &RxHeader, (uint8_t *)rx_buffer) == HAL_OK)
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO1, &RxHeader,rx_buffer) == HAL_OK)
     {
         can_id    = RxHeader.StdId;
         READ_FLAG = 1;

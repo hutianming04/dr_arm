@@ -1,9 +1,9 @@
 /**************************************************
-大然机器人-外转子盘式无刷伺服驱动器库
+��Ȼ������-��ת����ʽ��ˢ�ŷ���������
 
-适用平台：STM32平台
-库版本号：v2.1
-测试主控版本：STM32f103c8t6
+����ƽ̨��STM32ƽ̨
+��汾�ţ�v2.1
+�������ذ汾��STM32f103c8t6
 *************************************************/
 #include "DrMotor.h"
 #include <string.h>
@@ -12,108 +12,112 @@
 //#include "stm32F1xx.h"
 //#include "usart.h"
 #include <stdio.h>
-#include "bspcan.h"
-#include "ALLinit.h"
+#include "can.h"
+
 #define INPUT_MODE_PASSTHROUGH 1
 #define INPUT_MODE_VEL_RAMP 2
 #define AXIS_STATE_IDLE 1
 #define AXIS_STATE_CLOSED_LOOP_CONTROL 8
 #define INPUT_MODE_TORQUE_RAMP  6
 
-//#define SERVO_USART huart1              /* 驱动电机使用的串口 */
-#define SERVO_RECEIVE_TIMEOUT 1000        /* 串口接收超时(ms) */
-#define ENABLE_INPUT_VALIDITY_CHECK 1   /* 输入合法性检查。为 0 时不编译空指针判断等检查，可减小程序体积、加快处理速度。 */
+//#define SERVO_USART huart1              /* �������ʹ�õĴ��� */
+#define SERVO_RECEIVE_TIMEOUT 1000        /* ���ڽ��ճ�ʱ(ms) */
+#define ENABLE_INPUT_VALIDITY_CHECK 1   /* ����Ϸ��Լ�顣Ϊ 0 ʱ�������ָ���жϵȼ�飬�ɼ�С����������ӿ촦���ٶȡ� */
 
-#define SERVO_MALLOC(size) malloc(size) /* 如果使用了操作系统，需要将这个函数换成操作系统对应的函数 */
-#define SERVO_FREE(ptr) free(ptr)       /* 如果使用了操作系统，需要将这个函数换成操作系统对应的函数 */
-#define SERVO_DELAY(n) HAL_Delay(n)     /* 如果使用了操作系统，需要将这个函数换成操作系统对应的函数 */
-#define SERVO_SPRINTF sprintf           /* 使用这个函数需要在 Keil 里勾选 Use MicroLIB 或在 STM32CubeIDE 里勾选 Use float with printf from newlib-nano */
+#define SERVO_MALLOC(size) malloc(size) /* ʹ�ñ�׼�� malloc����ʹ�� RTOS ���滻Ϊ��Ӧ���亯�� */
+#define SERVO_FREE(ptr) free(ptr)       /* ʹ�ñ�׼�� free����ʹ�� RTOS ���滻Ϊ��Ӧ�ͷź��� */
+#define SERVO_DELAY(n) HAL_Delay(n)     /* ��ʱ����������Ϊ HAL_Delay�������滻���޸Ĵ˴� */
+#define SERVO_SPRINTF sprintf           /* ʹ�����������Ҫ�� Keil �ﹴѡ Use MicroLIB ���� STM32CubeIDE �ﹴѡ Use float with printf from newlib-nano */
 //#define PRE_READ() __HAL_UART_FLUSH_DRREGISTER(&SERVO_USART)
 
-char command[64];       // 命令发送缓冲区
+char command[64];       // ����ͻ�����
 char DaTemp[4];
 uint8_t i;
-volatile uint8_t rx_buffer[8];
-volatile uint16_t can_id = 0x00;
-volatile int8_t READ_FLAG = 0;  // 读取结果标志位
-volatile uint8_t state_pending = 0;  /* 下一条 CAN 消息是状态回复 (0x1E) */
+uint8_t rx_buffer[8];
+uint16_t can_id = 0x00;
+volatile int8_t READ_FLAG = 0;  // ��ȡ�����־λ
 
-int8_t TRAJ_MODE = 1;  //速度轨迹模式选择控制，1表示梯形轨迹模式，2表示S形轨迹模式（指的是速度曲线形状，适用于位置控制-梯形轨迹模式）
+int8_t TRAJ_MODE = 1;  //�ٶȹ켣ģʽѡ����ƣ�1��ʾ���ι켣ģʽ��2��ʾS�ι켣ģʽ��ָ�����ٶ�������״��������λ�ÿ���-���ι켣ģʽ��
 
-int8_t enable_replay_state = 1;  //如需要打开运动控制指令实时状态返回功能，请将该变量改为1，并将下面的MOTOR_NUM设置为总线上的最大电机ID号
+int8_t enable_replay_state = 1;  //����Ҫ���˶�����ָ��ʵʱ״̬���ع��ܣ��뽫�ñ�����Ϊ1�����������MOTOR_NUM����Ϊ�����ϵ������ID��
 
-float motor_state[MOTOR_NUM][5];    //电机状态二维数组，通过motor_state[id_num-1]获取电机id_num的实时返回状态[angle,speed,torque,traj_done,axis_error]，单位分别为degree，r/min,Nm，三个变量值均指的是电机输出轴
-// # 其中motor_state[id_num-1][0]表示id_num号电机的角度，motor_state[id_num-1][1]表示id_num号电机的速度，motor_state[id_num-1][2]表示id_num号电机的输出扭矩
+float motor_state[MOTOR_NUM][5];    //���״̬��ά���飬ͨ��motor_state[id_num-1]��ȡ���id_num��ʵʱ����״̬[angle,speed,torque,traj_done,axis_error]����λ�ֱ�Ϊdegree��r/min,Nm����������ֵ��ָ���ǵ�������
+// # ����motor_state[id_num-1][0]��ʾid_num�ŵ���ĽǶȣ�motor_state[id_num-1][1]��ʾid_num�ŵ�����ٶȣ�motor_state[id_num-1][2]��ʾid_num�ŵ�������Ť��
+uint32_t reply_state_error = 0;   // reply_state��������ۻ���־
 
-DR_MOTOR_Typdef motor;              /* 电机1 数据结构 (全局实例) */
-
-uint32_t reply_state_error = 0;   // reply_state错误次数累积标志
-//cur_angle_list = [];  //当前角度列表
+//cur_angle_list = [];  //��ǰ�Ƕ��б�
 
 //"""
-//内部辅助函数，用户无需使用
+//�ڲ������������û�����ʹ��
 //"""
 
-// CAN发送函数
+// CAN���ͺ���
 void send_command(uint8_t id_num, char cmd, unsigned char *data,uint8_t rt )
 {
     short id_list = (id_num << 5) + cmd;
     Can_Send_Msg(id_list, 8, data);
 }
 
-void SERVO_DELAY_US(uint32_t tick)
+void SERVO_DELAY_US(uint8_t tick)
 {
-    tick *= 36;                         /* ~1µs/tick @ 72MHz (≈2 cycles/loop) */
-    while (tick--) { __NOP(); }
+    for(uint8_t t = 0; t<tick; t++);
 }
 
-//CAN接收函数
+//CAN���պ���
 void receive_data(void)
 {
-    uint32_t timeout = 0;
-    while (READ_FLAG != 1)
+    uint8_t OutTime_mark=0;
+    uint32_t  OutTime=0;
+    while(OutTime_mark==0)
     {
-        SERVO_DELAY_US(100);            /* 100µs 轮询间隔 */
-        timeout++;
-        if (timeout > 5000) break;      /* 500ms 超时 */
+        if( READ_FLAG ==1) 
+        OutTime_mark=1;
+        SERVO_DELAY_US(1);
+        OutTime++;
+        if( OutTime ==0xfffe) 
+        {
+            OutTime_mark=1;
+        }
     }
 }
 
-// 数据格式转换：说明decode是将接收字节(bytes)转换为人可读的基础数据，encode反之
+
+// ���ݸ�ʽת��������decode�ǽ�������(bytes)ת�����˿��Ķ������ݣ�encode��֮
 /*
-float、short、unsigned short、int、unsigned int五种数据类型对应byte类型的转换
-数据类型对应参数0,1,2,3,4;
-使用方法：在函数中调用时，
-    需要在调用前对结构体内的数据进行赋值
-    value_data[3]：其他数据类型的数据转换为byte类型的数值
-    byte_data[8]：用于byte转换为其他数据类型的数值
-    type_data[3]：数据格式，根据需求自定义
-    length：数据个数，根据需求自定义
+float��short��unsigned short��int��unsigned int��������������byte���͵�ת��
+�������ݶ�Ӧ����0,1,2,3,4;
+ʹ�÷������ں����е���ʱ��
+    ����Ҫ�ڵ���ǰ�Խṹ���ڵ����ݽ��и�ֵ
+    value_data[3]�������������͵�����ת��Ϊbyte����ֵ
+    byte_data[8]������byteת��Ϊ�������ݵ����ͣ���ֵ
+    type_data[3]��������ֵ����Ҫ��
+    length�����ݸ�����ֵ����Ҫ��
 
-其他数据类型的数据转换为byte类型，调用format_data(data_struct data_list , char * str)：
-    输入为：结构体指针，要修改的参数详见"encode"
-byte转换为其他数据类型的数据，调用format_data(data_struct data_list , char * str)：
-    输入为：结构体指针，要修改的参数详见"decode"
+�����������͵�����ת��Ϊbyte������format_data(data_struct data_list , char * str)��
+    ����Ϊ���ṹ��ָ�룬Ҫ���Ĳ��������롰encode����
+����byteת��Ϊ�������ݵ����ͣ�����format_data(data_struct data_list , char * str)��
+    ����Ϊ���ṹ��ָ�룬Ҫ���Ĳ��������롰decode����
 
-注意若仅仅进行数据类型转换，测试使用，可直接调用下列两个函数，无需额外赋值
+�����������������������������Զ����ã�����Ҫʹ������������
     byte2value()
     value2byte()
 
-type类型：
-type_data=0, 数据类型float,数据长度32位,符号"f";
-type_data=1, 无符号短整型unsigned short int,数据长度16位,符号"u16";
-type_data=2, 有符号短整型short int,数据长度16位,符号"s16";
-type_data=3, 无符号整型unsigned int,数据长度32位,符号"u32";
-type_data=4, 有符号整型int,数据长度32位,符号"s32";
+type���ͣ�
+type_data=0, ��������float��,���ݳ���32λ,���š�f��;
+type_data=1, �޷��Ŷ�������unsigned short int��,���ݳ���16λ,���š�u16��;
+type_data=2, �з��Ŷ�������short int��,���ݳ���16λ,���š�s16��;
+type_data=3, �޷��Ŷ�������unsigned int��,���ݳ���32λ,���š�u32��;
+type_data=4, �з��Ŷ�������int��,���ݳ���32λ,���š�s32��;
 
 */
 struct format_data_struct
 {
-    float value_data[3];//其他数据类型的数据转换为byte类型的数值
-    unsigned char byte_data[8];//用于byte转换为其他数据类型的数值
-    int type_data[3];//数据格式，根据需求自定义
-    int length;//数据个数，根据需求自定义
-}*data_struct,data_list;  //定义全局变量 data_list，用于在CAN通信encode及decode过程中存储数据类型及变量值
+    float value_data[3];//�����������͵�����ת��Ϊbyte����ֵ
+    unsigned char byte_data[8];//����byteת��Ϊ�������ݵ����ͣ���ֵ
+    int type_data[3];//��������ֵ����Ҫ��
+    int length;//���ݸ�����ֵ����Ҫ��
+}*data_struct,data_list;  //����ȫ�ֱ��� data_list�����ڽ���CAN����encode��decode�����д洢�������뼰������
+
 // note: the bit order is in accordance with intel little endian
 static inline void uint16_to_data(uint16_t val, uint8_t *data)
 {
@@ -184,7 +188,7 @@ static inline float data_to_float(uint8_t *data)
     return tmp_float;
 }
 
-//不需主动调用
+//������������
 void byte2value()
 {
     int value_index = 0;
@@ -238,7 +242,7 @@ void byte2value()
         }
     }
 }
-//不需主动调用
+//������������
 void value2byte()
 {
     int byte_index=0;
@@ -299,7 +303,7 @@ void value2byte()
     }
 }
 
-//参数结构体指针，要做的操作（五种type转byte输入“encode”，byte转五种type输入“decode”）
+//�����ṹ��ָ�룬Ҫ���Ĳ���������typeתbyte���롰encode����byteת����type���롰decode����
 void format_data( float *value_data, int *type_data,int length, char * str)
 {
     data_list.length=length;
@@ -323,31 +327,21 @@ void format_data( float *value_data, int *type_data,int length, char * str)
 }
 
 /**
- * @brief 电机运动控制指令状态实时返回参数
- * 通过该函数读取电机运动控制指令实时返回的电机状态参数[angle,speed,torque]，单位分别为degree，r/min,Nm，三个变量值均指的是电机输出轴
- * 其中motor_state[id_num-1][0]表示id_num号电机的角度，motor_state[id_num-1][1]表示id_num号电机的速度，motor_state[id_num-1][2]表示id_num号电机的输出扭矩
- * @param id_num 需要读取的电机编号  注意该指令id_num不能为0
+ * @brief ����˶�����ָ��״̬ʵʱ���ز���
+ * ͨ���ú�����ȡ����˶�����ָ��ʵʱ���صĵ��״̬����[angle,speed,torque]����λ�ֱ�Ϊdegree��r/min,Nm����������ֵ��ָ���ǵ�������
+ * ����motor_state[id_num-1][0]��ʾid_num�ŵ���ĽǶȣ�motor_state[id_num-1][1]��ʾid_num�ŵ�����ٶȣ�motor_state[id_num-1][2]��ʾid_num�ŵ�������Ť��
+ * @param id_num ��Ҫ��ȡ�ĵ�����  ע���ָ��id_num����Ϊ0
 
  */
 void reply_state(uint8_t id_num)
 {
-    if(enable_replay_state&&id_num<=MOTOR_NUM)   //id_num不能为0
+    if(enable_replay_state&&id_num<=MOTOR_NUM)   //id_num����Ϊ0
     {
-        /* 丢弃残留旧消息，确保后续收到的是本次指令回复 */
-        HAL_NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
-        READ_FLAG = 0;
-        while (READ_FLAG == 1)                  /* 清空 FIFO 残留 */
-        {
-            CAN_RxHeaderTypeDef _hdr;
-            uint8_t _dummy[8];
-            HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &_hdr, _dummy);
-            READ_FLAG = 0;
-        }
-        HAL_NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
+        READ_FLAG=0;
         receive_data();
         if (READ_FLAG == 1)
         {
-						if(id_num==0)  //如果ID号为0，则通过返回数据帧的ID信息更新ID号
+						if(id_num==0)  //���ID��Ϊ0����ͨ����������֡��ID��Ϣ����ID��
 						{
 							id_num = (uint8_t)((can_id & 0x07E0) >> 5)&0xFF;
 						}
@@ -370,19 +364,19 @@ void reply_state(uint8_t id_num)
 }
 
 /**
- * @brief 单个电机角度控制函数。
- * 控制指定电机编号的电机按照指定的速度转动到指定的角度（绝对角度，相对于电机零点位置）。
+ * @brief ��������Ƕȿ��ƺ�����
+ * ����ָ�������ŵĵ������ָ�����ٶ�ת����ָ���ĽǶȣ����ԽǶȣ�����ڵ�����λ�ã���
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param angle 电机角度（-360~360）*n，支持大角度转动
- * @param t mode=0,无作用，直接给0即可; mode=1, 运动时间（s）; mode =2, 前馈速度（r/min)
- * @param param mode=0,角度输入滤波带宽（<300），mode=1,启动和停止阶段加速度（(r/min)/s）; mode =2, 前馈扭矩（Nm)
- * @param mode 角度控制模式选择，电机支持三种角度控制模式，
- *             mode = 0: 多个电机轨迹跟踪模式，用于一般绕轴运动，特别适合多个轨迹点输入，角度输入带宽参数需设置为指令发送频率的一半。
- *             mode = 1: 多个电机梯形轨迹模式，此时speed用运动时间t（s）表示，param为目标加速度（(r/min)/s）。
- *             mode = 2: 前馈控制模式，这种模式下的t为前馈速度，param为前馈扭矩。前馈控制在原有PID控制基础上加入速度和扭矩前馈，提高系统的响应特性和减少静态误差。
- * @note 在mode=1,梯形轨迹模式中，speed和accel都需要大于0.如果speed=0会导致电机报motor error 并退出闭环控制模式，所以在这种模式下如果speed=0,会被用0.01代替。
-         另外如果这种模式下accel=0，电机以最快速度运动到angle,speed参数不再其作用。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param angle ����Ƕȣ�-360~360��*n��֧�ִ�Ƕ�ת��
+ * @param t mode=0,�����ã�ֱ�Ӹ�0����; mode=1, �˶�ʱ�䣨s��; mode =2, ǰ���ٶȣ�r/min)
+ * @param param mode=0,�Ƕ������˲�������<300����mode=1,������ֹͣ�׶μ��ٶȣ�(r/min)/s��; mode =2, ǰ��Ť�أ�Nm)
+ * @param mode �Ƕȿ���ģʽѡ�񣬵��֧�����ֽǶȿ���ģʽ��
+ *             mode = 0: �������켣����ģʽ������һ�������˶����ر��ʺ϶���켣�����룬�Ƕ������������������Ϊָ���Ƶ�ʵ�һ�롣
+ *             mode = 1: ���������ι켣ģʽ����ʱspeed���˶�ʱ��t��s����ʾ��paramΪĿ����ٶȣ�(r/min)/s����
+ *             mode = 2: ǰ������ģʽ������ģʽ�µ�tΪǰ���ٶȣ�paramΪǰ��Ť�ء�ǰ��������ԭ��PID���ƻ����ϼ����ٶȺ�Ť��ǰ�������ϵͳ����Ӧ���Ժͼ��پ�̬��
+ * @note ��mode=1,���ι켣ģʽ�У�speed��accel����Ҫ����0.���speed=0�ᵼ�µ����motor error ���˳��ջ�����ģʽ������������ģʽ�����speed=0,�ᱻ��0.01���档
+         �����������ģʽ��accel=0�����������ٶ��˶���angle,speed�������������á�
  */
 void preset_angle(uint8_t id_num, float angle, float t, float param, int mode)
 {
@@ -427,18 +421,18 @@ void preset_angle(uint8_t id_num, float angle, float t, float param, int mode)
         format_data(value_data,type_data,3,"encode");
         send_command(id_num,0x0C,data_list.byte_data,0);
     }
-    get_state(id_num);
+    reply_state(id_num);
 }
 /**
- * @brief 单个电机速度预设函数。
- * 预设指定电机编号的电机的目标速度，之后需要用mv指令启动转动。
+ * @brief ��������ٶ�Ԥ�躯����
+ * Ԥ��ָ�������ŵĵ����Ŀ���ٶȣ�֮����Ҫ��mvָ������ת����
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param speed 目标速度（r/min）
- * @param param mode=1, 前馈扭矩（Nm); mode!=1,或目标加速度（(r/min)/s）
- * @param mode 控制模式选择
- *             mode=1, 速度前馈控制模式，电机将目标速度直接设为speed
- *             mode!=1,速度爬升控制模式，电机将按照目标加速度axis0.controller.config_.vel_ramp_rate变化到speed。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param speed Ŀ���ٶȣ�r/min��
+ * @param param mode=1, ǰ��Ť�أ�Nm); mode!=1,��Ŀ����ٶȣ�(r/min)/s��
+ * @param mode ����ģʽѡ��
+ *             mode=1, �ٶ�ǰ������ģʽ�������Ŀ���ٶ�ֱ����Ϊspeed
+ *             mode!=1,�ٶ���������ģʽ�����������Ŀ����ٶ�axis0.controller.config_.vel_ramp_rate�仯��speed��
  */
 void preset_speed(uint8_t id_num, float speed, float param, int mode)
 {
@@ -467,19 +461,19 @@ void preset_speed(uint8_t id_num, float speed, float param, int mode)
         format_data(value_data,type_data,3,"encode");
     }
     send_command(id_num, 0x0C,data_list.byte_data, 0);
-    get_state(id_num);
+    reply_state(id_num);
 }
 
 /**
- * @brief 单个电机力矩预设函数。
- * 预设指定电机编号的电机目标扭矩（Nm）
+ * @brief �����������Ԥ�躯����
+ * Ԥ��ָ�������ŵĵ��Ŀ��Ť�أ�Nm��
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param torque 电机输出（Nm)
- * @param param mode=1,改参数无意义；mode!=1,扭矩上升速度axis0.controller.config.torque_ramp_rate（Nm/s）
- * @param mode 控制模式选择
- *             mode=1, 扭矩直接控制模式，电机将目标扭矩直接设为torque
- *             mode!=1,扭矩爬升控制模式，电机将按照扭矩上升速率axis0.controller.config.torque_ramp_rate（Nm/s）变化到torque。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param torque ��������Nm)
+ * @param param mode=1,�Ĳ��������壻mode!=1,Ť�������ٶ�axis0.controller.config.torque_ramp_rate��Nm/s��
+ * @param mode ����ģʽѡ��
+ *             mode=1, Ť��ֱ�ӿ���ģʽ�������Ŀ��Ť��ֱ����Ϊtorque
+ *             mode!=1,Ť����������ģʽ�����������Ť����������axis0.controller.config.torque_ramp_rate��Nm/s���仯��torque��
  */
 void preset_torque(uint8_t id_num, float torque, float param, int mode)
 {
@@ -504,26 +498,26 @@ void preset_torque(uint8_t id_num, float torque, float param, int mode)
     format_data(value_data,type_data,3,"encode");
 
     send_command(id_num,0x0C,data_list.byte_data,0);
-    get_state(id_num);
+    reply_state(id_num);
 }
-// 功能函数，用户使用
+// ���ܺ������û�ʹ��
 
-// 运动控制功能
+// �˶����ƹ���
 
 /**
- * @brief 单个电机角度控制函数。
- * 控制指定电机编号的电机按照指定的速度转动到指定的角度（绝对角度，相对于电机零点位置）。
+ * @brief ��������Ƕȿ��ƺ�����
+ * ����ָ�������ŵĵ������ָ�����ٶ�ת����ָ���ĽǶȣ����ԽǶȣ�����ڵ�����λ�ã���
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param angle 电机角度（-360~360）*n，支持大角度转动
- * @param speed 最大速度限制或前馈速度（r/min）
- * @param param mode=0,角度输入滤波带宽（<300），mode=1,启动和停止阶段加速度（(r/min)/s）; mode =2, 前馈扭矩（Nm)
- * @param mode 角度控制模式选择，电机支持三种角度控制模式，
- *             mode = 0: 轨迹跟踪模式，用于一般绕轴运动，特别适合多个轨迹点输入，角度输入带宽参数需设置为指令发送频率的一半。
- *             mode = 1: 梯形轨迹模式，这种模式下可以指定运动过程中的速度（speed）和启停加速度（accel）。
- *             mode = 2: 前馈控制模式，这种模式下的speed和torque分别为前馈控制量.前馈控制在原有PID控制基础上加入速度和扭矩前馈，提高系统的响应特性和减少静态误差。
- * @note 在mode=1,梯形轨迹模式中，speed和accel都需要大于0.如果speed=0会导致电机报motor error 并退出闭环控制模式，所以在这种模式下如果speed=0,会被用0.01代替。
- *       另外如果这种模式下accel=0，电机以最快速度运动到angle,speed参数不再其作用。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param angle ����Ƕȣ�-360~360��*n��֧�ִ�Ƕ�ת��
+ * @param speed ����ٶ����ƻ�ǰ���ٶȣ�r/min��
+ * @param param mode=0,�Ƕ������˲�������<300����mode=1,������ֹͣ�׶μ��ٶȣ�(r/min)/s��; mode =2, ǰ��Ť�أ�Nm)
+ * @param mode �Ƕȿ���ģʽѡ�񣬵��֧�����ֽǶȿ���ģʽ��
+ *             mode = 0: �켣����ģʽ������һ�������˶����ر��ʺ϶���켣�����룬�Ƕ������������������Ϊָ���Ƶ�ʵ�һ�롣
+ *             mode = 1: ���ι켣ģʽ������ģʽ�¿���ָ���˶������е��ٶȣ�speed������ͣ���ٶȣ�accel����
+ *             mode = 2: ǰ������ģʽ������ģʽ�µ�speed��torque�ֱ�Ϊǰ��������.ǰ��������ԭ��PID���ƻ����ϼ����ٶȺ�Ť��ǰ�������ϵͳ����Ӧ���Ժͼ��پ�̬��
+ * @note ��mode=1,���ι켣ģʽ�У�speed��accel����Ҫ����0.���speed=0�ᵼ�µ����motor error ���˳��ջ�����ģʽ������������ģʽ�����speed=0,�ᱻ��0.01���档
+ *       �����������ģʽ��accel=0�����������ٶ��˶���angle,speed�������������á�
  */
 void set_angle(uint8_t id_num, float angle, float speed, float param, int mode)
 {
@@ -572,21 +566,22 @@ void set_angle(uint8_t id_num, float angle, float speed, float param, int mode)
 
         send_command(id_num, 0x1B, data_list.byte_data, 0);
     }
+    reply_state(id_num);
 }
 
 /**
- * @brief 多个电机控制函数。
- * 控制指定电机编号的电机按照指定的速度转动到指定的角度，保证多个电机同时到达目标角度。
+ * @brief ���������ƺ�����
+ * ����ָ�������ŵĵ������ָ�����ٶ�ת����ָ���ĽǶȣ���֤������ͬʱ����Ŀ��Ƕȡ�
  *
- * @param id_list 电机编号组成的数组
- * @param angle_list 电机角度组成的数组
- * @param speed 最大的电机转动的速度（r/min）或前馈速度
- * @param param mode=0,角度输入滤波带宽（<300），mode=1,启动和停止阶段加速度（(r/min)/s）; mode =2, 前馈速度（r/min)
- * @param mode 角度控制模式选择，电机支持三种角度控制模式，
- *             mode = 0: 多个电机轨迹跟踪模式，用于一般绕轴运动，特别适合多个轨迹点输入，角度输入带宽参数需设置为指令发送频率的一半。
- *             mode = 1: 多个电机梯形轨迹模式，此时speed为多个电机中的最快速度（r/min），param为目标加速度（(r/min)/s）。
- *             mode = 2: 前馈控制模式，这种模式下的speed和torque分别为前馈控制量.前馈控制在原有PID控制基础上加入速度和扭矩前馈，提高系统的响应特性和减少静态误差。
- * @param n 数组长度
+ * @param id_list ��������ɵ�����
+ * @param angle_list ����Ƕ���ɵ�����
+ * @param speed ���ĵ��ת�����ٶȣ�r/min����ǰ���ٶ�
+ * @param param mode=0,�Ƕ������˲�������<300����mode=1,������ֹͣ�׶μ��ٶȣ�(r/min)/s��; mode =2, ǰ���ٶȣ�r/min)
+ * @param mode �Ƕȿ���ģʽѡ�񣬵��֧�����ֽǶȿ���ģʽ��
+ *             mode = 0: �������켣����ģʽ������һ�������˶����ر��ʺ϶���켣�����룬�Ƕ������������������Ϊָ���Ƶ�ʵ�һ�롣
+ *             mode = 1: ���������ι켣ģʽ����ʱspeedΪ�������е�����ٶȣ�r/min����paramΪĿ����ٶȣ�(r/min)/s����
+ *             mode = 2: ǰ������ģʽ������ģʽ�µ�speed��torque�ֱ�Ϊǰ��������.ǰ��������ԭ��PID���ƻ����ϼ����ٶȺ�Ť��ǰ�������ϵͳ����Ӧ���Ժͼ��پ�̬��
+ * @param n ���鳤��
  */
 void set_angles(uint8_t *id_list, float *angle_list, float speed, float param, int mode, size_t n)
 {
@@ -630,7 +625,7 @@ void set_angles(uint8_t *id_list, float *angle_list, float speed, float param, i
 
         format_data(value_data,type_data,3,"encode");
 
-        send_command(0,0x08,data_list.byte_data,0);  // 需要用标准帧（数据帧）进行发送，不能用远程帧
+        send_command(0,0x08,data_list.byte_data,0);  // ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
     }
     else if (mode == 1)
     {
@@ -670,7 +665,7 @@ void set_angles(uint8_t *id_list, float *angle_list, float speed, float param, i
         int type_data[3]= {3,1,1};
         format_data(value_data,type_data,3,"encode");
 
-        send_command(0,0x08,data_list.byte_data,0); // 需要用标准帧（数据帧）进行发送，不能用远程帧
+        send_command(0,0x08,data_list.byte_data,0); // ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
     }
     else if( mode == 2)
     {
@@ -682,43 +677,43 @@ void set_angles(uint8_t *id_list, float *angle_list, float speed, float param, i
         int type_data[3]= {3,1,1};
         format_data(value_data,type_data,3,"encode");
 
-        send_command(0,0x08,data_list.byte_data,0);  // 需要用标准帧（数据帧）进行发送，不能用远程帧
+        send_command(0,0x08,data_list.byte_data,0);  // ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
     }
     memcpy(current_angle_list, angle_list, n * sizeof(float));
 }
 
 /**
- * @brief 单个电机相对角度控制函数。
- * 控制指定电机编号的电机按照指定的速度相对转动指定的角度（相对角度，相对于电机当前位置）。
+ * @brief ���������ԽǶȿ��ƺ�����
+ * ����ָ�������ŵĵ������ָ�����ٶ����ת��ָ���ĽǶȣ���ԽǶȣ�����ڵ����ǰλ�ã���
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param angle 电机相对角度（-360~360）*n，支持大角度转动
- * @param speed 最大速度限制或前馈速度（r/min）
- * @param param mode=0,角度输入滤波带宽（<300），mode=1,启动和停止阶段加速度（(r/min)/s）; mode =2, 前馈扭矩（Nm)
- * @param mode 角度控制模式选择，电机支持三种角度控制模式，
- *             mode = 0: 轨迹跟踪模式，用于一般绕轴运动，特别适合多个轨迹点输入，角度输入带宽参数需设置为指令发送频率的一半。
- *             mode = 1: 梯形轨迹模式，这种模式下可以指定运动过程中的速度（speed）和启停加速度（accel）。
- *             mode = 2: 前馈控制模式，这种模式下的speed和torque分别为前馈控制量.前馈控制在原有PID控制基础上加入速度和扭矩前馈，提高系统的响应特性和减少静态误差。
- * @note 在mode=1,梯形轨迹模式中，speed和accel都需要大于0.如果speed=0会导致电机报motor error 并退出闭环控制模式，所以在这种模式下如果speed=0,会被用0.01代替。
- *       另外如果这种模式下accel=0，电机以最快速度运动到angle,speed参数不再其作用。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param angle �����ԽǶȣ�-360~360��*n��֧�ִ�Ƕ�ת��
+ * @param speed ����ٶ����ƻ�ǰ���ٶȣ�r/min��
+ * @param param mode=0,�Ƕ������˲�������<300����mode=1,������ֹͣ�׶μ��ٶȣ�(r/min)/s��; mode =2, ǰ��Ť�أ�Nm)
+ * @param mode �Ƕȿ���ģʽѡ�񣬵��֧�����ֽǶȿ���ģʽ��
+ *             mode = 0: �켣����ģʽ������һ�������˶����ر��ʺ϶���켣�����룬�Ƕ������������������Ϊָ���Ƶ�ʵ�һ�롣
+ *             mode = 1: ���ι켣ģʽ������ģʽ�¿���ָ���˶������е��ٶȣ�speed������ͣ���ٶȣ�accel����
+ *             mode = 2: ǰ������ģʽ������ģʽ�µ�speed��torque�ֱ�Ϊǰ��������.ǰ��������ԭ��PID���ƻ����ϼ����ٶȺ�Ť��ǰ�������ϵͳ����Ӧ���Ժͼ��پ�̬��
+ * @note ��mode=1,���ι켣ģʽ�У�speed��accel����Ҫ����0.���speed=0�ᵼ�µ����motor error ���˳��ջ�����ģʽ������������ģʽ�����speed=0,�ᱻ��0.01���档
+ *       �����������ģʽ��accel=0�����������ٶ��˶���angle,speed�������������á�
  */
 void step_angle(uint8_t id_num, float angle, float speed, float param, int mode)
 {
     step_angles(&id_num,&angle,speed,param,mode,1);
 }
 /**
- * @brief 多个电机相对角度控制函数。
- * 控制指定电机编号的电机按照指定的时间相对转动给定角度。
+ * @brief ��������ԽǶȿ��ƺ�����
+ * ����ָ�������ŵĵ������ָ����ʱ�����ת�������Ƕȡ�
  *
- * @param id_list 电机编号组成的列表
- * @param angle_list 电机角度组成的列表
- * @param speed 最大的电机转动的速度（r/min）或前馈速度
- * @param param mode=0,角度输入滤波带宽（<300），mode=1,启动和停止阶段加速度（(r/min)/s）; mode =2, 前馈速度（r/min)
- * @param mode 角度控制模式选择，电机支持三种角度控制模式，
- *             mode = 0: 多个电机轨迹跟踪模式，用于一般绕轴运动，特别适合多个轨迹点输入，角度输入带宽参数需设置为指令发送频率的一半。
- *             mode = 1: 多个电机梯形轨迹模式，此时speed为多个电机中的最快速度（r/min），param为目标加速度（(r/min)/s）。
- *             mode = 2: 前馈控制模式，这种模式下的speed和torque分别为前馈控制量.前馈控制在原有PID控制基础上加入速度和扭矩前馈，提高系统的响应特性和减少静态误差。
- * @param n 数组长度
+ * @param id_list ��������ɵ��б�
+ * @param angle_list ����Ƕ���ɵ��б�
+ * @param speed ���ĵ��ת�����ٶȣ�r/min����ǰ���ٶ�
+ * @param param mode=0,�Ƕ������˲�������<300����mode=1,������ֹͣ�׶μ��ٶȣ�(r/min)/s��; mode =2, ǰ���ٶȣ�r/min)
+ * @param mode �Ƕȿ���ģʽѡ�񣬵��֧�����ֽǶȿ���ģʽ��
+ *             mode = 0: �������켣����ģʽ������һ�������˶����ر��ʺ϶���켣�����룬�Ƕ������������������Ϊָ���Ƶ�ʵ�һ�롣
+ *             mode = 1: ���������ι켣ģʽ����ʱspeedΪ�������е�����ٶȣ�r/min����paramΪĿ����ٶȣ�(r/min)/s����
+ *             mode = 2: ǰ������ģʽ������ģʽ�µ�speed��torque�ֱ�Ϊǰ��������.ǰ��������ԭ��PID���ƻ����ϼ����ٶȺ�Ť��ǰ�������ϵͳ����Ӧ���Ժͼ��پ�̬��
+ * @param n ���鳤��
  */
 void step_angles(uint8_t *id_list, float *angle_list, float speed, float param, int mode, size_t n)
 {
@@ -735,7 +730,7 @@ void step_angles(uint8_t *id_list, float *angle_list, float speed, float param, 
         int type_data[3]= {3,1,1};
         format_data(value_data,type_data,3,"encode");
 
-        send_command(0,0x08,data_list.byte_data,0); //需要用标准帧（数据帧）进行发送，不能用远程帧
+        send_command(0,0x08,data_list.byte_data,0); //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
     }
     else if( mode == 1)
     {
@@ -775,7 +770,7 @@ void step_angles(uint8_t *id_list, float *angle_list, float speed, float param, 
         int type_data[3]= {3,1,1};
         format_data(value_data,type_data,3,"encode");
 
-        send_command(0, 0x08, data_list.byte_data,0);  // 需要用标准帧（数据帧）进行发送，不能用远程帧
+        send_command(0, 0x08, data_list.byte_data,0);  // ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
     }
     else if (mode == 2)
     {
@@ -787,20 +782,20 @@ void step_angles(uint8_t *id_list, float *angle_list, float speed, float param, 
         int type_data[3]= {3,1,1};
         format_data(value_data,type_data,3,"encode");
 
-        send_command(0,0x08,data_list.byte_data,0);  //需要用标准帧（数据帧）进行发送，不能用远程帧
+        send_command(0,0x08,data_list.byte_data,0);  //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
     }
 }
 /**
- * @brief 单个电机速度控制函数。
- * 控制指定电机编号的电机按照指定的速度连续整周转动。
+ * @brief ��������ٶȿ��ƺ�����
+ * ����ָ�������ŵĵ������ָ�����ٶ���������ת����
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param speed 目标速度（r/min）
- * @param param mode=1, 前馈扭矩（Nm); mode!=1,或目标加速度（(r/min)/s）
- * @param mode 控制模式选择
- *             mode=1, 速度前馈控制模式，电机将目标速度直接设为speed
- *             mode!=1,速度爬升控制模式，电机将按照目标加速度axis0.controller.config_.vel_ramp_rate变化到speed。
- * @note 在速度爬升模式下，如果目标加速度axis0.controller.config_.vel_ramp_rate设置为0，则电机速度将保持当前值不变。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param speed Ŀ���ٶȣ�r/min��
+ * @param param mode=1, ǰ��Ť�أ�Nm); mode!=1,��Ŀ����ٶȣ�(r/min)/s��
+ * @param mode ����ģʽѡ��
+ *             mode=1, �ٶ�ǰ������ģʽ�������Ŀ���ٶ�ֱ����Ϊspeed
+ *             mode!=1,�ٶ���������ģʽ�����������Ŀ����ٶ�axis0.controller.config_.vel_ramp_rate�仯��speed��
+ * @note ���ٶ�����ģʽ�£����Ŀ����ٶ�axis0.controller.config_.vel_ramp_rate����Ϊ0�������ٶȽ����ֵ�ǰֵ���䡣
  */
 void set_speed(uint8_t id_num, float speed, float param, int mode)
 {
@@ -827,19 +822,19 @@ void set_speed(uint8_t id_num, float speed, float param, int mode)
         format_data(value_data,type_data,3,"encode");
     }
     send_command(id_num,0x1c,data_list.byte_data,0);
-    get_state(id_num);
+    reply_state(id_num);
 }
 /**
- * @brief 多个电机速度控制函数。
- * 控制指定多个电机编号的电机按照指定的速度连续整周转动。
+ * @brief �������ٶȿ��ƺ�����
+ * ����ָ����������ŵĵ������ָ�����ٶ���������ת����
  *
- * @param id_list 电机编号组成的列表
- * @param speed_list 电机目标速度（r/min）组成的列表
- * @param param mode=1, 前馈扭矩（Nm); mode!=1,或目标加速度（(r/min)/s）
- * @param mode 控制模式选择
- *             mode=1, 速度前馈控制模式，电机将目标速度直接设为speed
- *             mode!=1,速度爬升控制模式，电机将按照目标加速度axis0.controller.config_.vel_ramp_rate变化到speed。
- * @param n 数组长度
+ * @param id_list ��������ɵ��б�
+ * @param speed_list ���Ŀ���ٶȣ�r/min����ɵ��б�
+ * @param param mode=1, ǰ��Ť�أ�Nm); mode!=1,��Ŀ����ٶȣ�(r/min)/s��
+ * @param mode ����ģʽѡ��
+ *             mode=1, �ٶ�ǰ������ģʽ�������Ŀ���ٶ�ֱ����Ϊspeed
+ *             mode!=1,�ٶ���������ģʽ�����������Ŀ����ٶ�axis0.controller.config_.vel_ramp_rate�仯��speed��
+ * @param n ���鳤��
  */
 void set_speeds(uint8_t *id_list, float *speed_list, float param, float mode, size_t n)
 {
@@ -850,22 +845,22 @@ void set_speeds(uint8_t *id_list, float *speed_list, float param, float mode, si
     float value_data[3]= {order_num,0,0};
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
-    send_command(0, 0x08, data_list.byte_data, 0); //需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(0, 0x08, data_list.byte_data, 0); //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 }
 
 /**
- * @brief 单个电机力矩（电流）闭环控制函数。
- * 控制指定电机编号的电机输出指定的扭矩（Nm）
+ * @brief ����������أ��������ջ����ƺ�����
+ * ����ָ�������ŵĵ�����ָ����Ť�أ�Nm��
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param torque 电机输出（Nm)
- * @param param mode=1,改参数无意义；mode!=1,扭矩上升速度axis0.controller.config.torque_ramp_rate（Nm/s）
- * @param mode 控制模式选择
- *             mode=1, 扭矩直接控制模式，电机将目标扭矩直接设为torque
- *             mode!=1,扭矩爬升控制模式，电机将按照扭矩上升速率axis0.controller.config.torque_ramp_rate（Nm/s）变化到torque。
- * @note 如果电机转速超过您设置的 vel_limit ，电机输出的力矩将会减小。
- *       可以设置 axis0.controller.config.enable_current_mode_vel_limit = False 来禁止力矩减小。
- *       另外在扭矩爬升控制模式下，如果点击扭矩上升速率axis0.controller.config.torque_ramp_rate为0，则点击扭矩将在当前值保持不变。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param torque ��������Nm)
+ * @param param mode=1,�Ĳ��������壻mode!=1,Ť�������ٶ�axis0.controller.config.torque_ramp_rate��Nm/s��
+ * @param mode ����ģʽѡ��
+ *             mode=1, Ť��ֱ�ӿ���ģʽ�������Ŀ��Ť��ֱ����Ϊtorque
+ *             mode!=1,Ť����������ģʽ�����������Ť����������axis0.controller.config.torque_ramp_rate��Nm/s���仯��torque��
+ * @note ������ת�ٳ��������õ� vel_limit �������������ؽ����С��
+ *       �������� axis0.controller.config.enable_current_mode_vel_limit = False ����ֹ���ؼ�С��
+ *       ������Ť����������ģʽ�£�������Ť����������axis0.controller.config.torque_ramp_rateΪ0������Ť�ؽ��ڵ�ǰֵ���ֲ��䡣
  */
 void set_torque(uint8_t id_num, float torque, float param, int mode)
 {
@@ -886,57 +881,19 @@ void set_torque(uint8_t id_num, float torque, float param, int mode)
     int type_data[3]= {0,2,1};
     format_data(value_data,type_data,3,"encode");
     send_command(id_num,0x1d,data_list.byte_data,0);
-    get_state(id_num);
+    reply_state(id_num);
 }
-
 /**
- * @brief 单个电机力矩控制（非阻塞版本，不查询回复状态）。
- * @note  用于 1kHz 等高频控制循环，避免 receive_data() 阻塞。
- *        电机状态需通过独立的 get_state() 查询维护。
- */
-void set_torque_cmd(uint8_t id_num, float torque)
-{
-    float factor = 0.01;
-    unsigned short u16_input_mode = INPUT_MODE_PASSTHROUGH;
-    int s16_ramp_rate = 0;
-
-    float value_data[3] = {torque, s16_ramp_rate, u16_input_mode};
-    int type_data[3] = {0, 2, 1};
-    format_data(value_data, type_data, 3, "encode");
-    send_command(id_num, 0x1d, data_list.byte_data, 0);
-}
-
-/**
- * @brief 单个电机力矩爬升控制（非阻塞版本，不查询回复状态）。
- * @note  用于 1kHz 等高频控制循环，通过扭矩爬升速率限制力矩变化，
- *        避免直接力矩模式下的阶跃冲击。电机状态需通过独立的 get_state() 查询维护。
- * @param id_num    电机 ID 编号
- * @param torque    目标扭矩 (Nm)
- * @param ramp_rate 扭矩爬升速率 (Nm/s)，由驱动器内部限幅
- */
-void set_torque_ramp_cmd(uint8_t id_num, float torque, float ramp_rate)
-{
-    float factor = 0.01;
-    unsigned short u16_input_mode = INPUT_MODE_TORQUE_RAMP;
-    int s16_ramp_rate = (int)(ramp_rate / factor);
-
-    float value_data[3] = {torque, s16_ramp_rate, u16_input_mode};
-    int type_data[3] = {0, 2, 1};
-    format_data(value_data, type_data, 3, "encode");
-    send_command(id_num, 0x1d, data_list.byte_data, 0);
-}
-
-/**
- * @brief 多个个电机力矩控制函数。
- * 同时控制多个电机编号的电机目标扭矩（Nm）
+ * @brief �����������ؿ��ƺ�����
+ * ͬʱ���ƶ�������ŵĵ��Ŀ��Ť�أ�Nm��
  *
- * @param id_list 电机编号组成的列表
- * @param torque_list 电机目标扭矩（Nm)组成的列表
- * @param param mode=1,改参数无意义；mode!=1,扭矩上升速度axis0.controller.config.torque_ramp_rate（Nm/s）
- * @param mode 控制模式选择
- *             mode=1, 扭矩直接控制模式，电机将目标扭矩直接设为torque
- *             mode!=1,扭矩爬升控制模式，电机将按照扭矩上升速率axis0.controller.config.torque_ramp_rate（Nm/s）变化到torque。
- * @param n 数组长度
+ * @param id_list ��������ɵ��б�
+ * @param torque_list ���Ŀ��Ť�أ�Nm)��ɵ��б�
+ * @param param mode=1,�Ĳ��������壻mode!=1,Ť�������ٶ�axis0.controller.config.torque_ramp_rate��Nm/s��
+ * @param mode ����ģʽѡ��
+ *             mode=1, Ť��ֱ�ӿ���ģʽ�������Ŀ��Ť��ֱ����Ϊtorque
+ *             mode!=1,Ť����������ģʽ�����������Ť����������axis0.controller.config.torque_ramp_rate��Nm/s���仯��torque��
+ * @param n ���鳤��
  */
 void set_torques(uint8_t *id_list, float *torque_list, float param, int mode, size_t n)
 {
@@ -947,22 +904,22 @@ void set_torques(uint8_t *id_list, float *torque_list, float param, int mode, si
     float value_data[3]= {order_num,0,0};
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
-    send_command(0, 0x08, data_list.byte_data, 0);  //需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(0, 0x08, data_list.byte_data, 0);  //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 		
 }
 /**
-* @brief 单个电机阻抗控制函数。
-* 对指定电机编号的电机进行阻抗控制。
+* @brief ��������迹���ƺ�����
+* ��ָ�������ŵĵ�������迹���ơ�
 *
-* @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
-* @param pos 电机目标角度（度）
-* @param vel 电机目标速度（r/min）
-* @param tff 前馈扭矩（Nm)
-* @param kp 刚度系数(rad/Nm)
-* @param kd 阻尼系数(rad/s/Nm)
-* @note 阻抗控制为MIT开源方案中的控制模式，其目标输出扭矩计算公式如下：
-        torque = kp*( pos – pos_) + t_ff + kd*(vel – vel_)
-        其中pos_和vel_分别为输出轴当前实际位置（degree）和当前实际速度（r/min）, kp和kd为刚度系数和阻尼系数，系数比例与MIT等效
+* @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+* @param pos ���Ŀ��Ƕȣ��ȣ�
+* @param vel ���Ŀ���ٶȣ�r/min��
+* @param tff ǰ��Ť�أ�Nm)
+* @param kp �ն�ϵ��(rad/Nm)
+* @param kd ����ϵ��(rad/s/Nm)
+* @note �迹����ΪMIT��Դ�����еĿ���ģʽ����Ŀ�����Ť�ؼ��㹫ʽ���£�
+        torque = kp*( pos �C pos_) + t_ff + kd*(vel �C vel_)
+        ����pos_��vel_�ֱ�Ϊ����ᵱǰʵ��λ�ã�degree���͵�ǰʵ���ٶȣ�r/min��, kp��kdΪ�ն�ϵ��������ϵ����ϵ��������MIT��Ч
 */
 void impedance_control(uint8_t id_num, float pos, float vel, float tff, float kp, float kd)
 {
@@ -972,15 +929,15 @@ void impedance_control(uint8_t id_num, float pos, float vel, float tff, float kp
     float value_data[3]= {order_num,(int)(kp / factor),(int)(kd / factor)};
     int type_data[3]= {3,2,2};
     format_data(value_data,type_data,3,"encode");
-    send_command(0, 0x08,data_list.byte_data,0);//需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(0, 0x08,data_list.byte_data,0);//��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 		
 }
 /**
- * @brief 急停函数
- * 控制电机紧急停止。电机急停后将切换到IDLE待机模式，电机卸载并生成ERROR_ESTOP_REQUESTED错误标志，不再响应set_angle/speed/torque指令。
- * 如果要恢复正常控制模式，需要首先用clear_error清除错误标志后,然后用set_mode函数将模式设置为2（闭环控制模式）。
+ * @brief ��ͣ����
+ * ���Ƶ������ֹͣ�������ͣ���л���IDLE����ģʽ�����ж�ز�����ERROR_ESTOP_REQUESTED�����־��������Ӧset_angle/speed/torqueָ�
+ * ���Ҫ�ָ���������ģʽ����Ҫ������clear_error��������־��,Ȼ����set_mode������ģʽ����Ϊ2���ջ�����ģʽ����
  *
- * @param id_num 需要急停的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
+ * @param id_num ��Ҫ��ͣ�ĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
  */
 void estop(uint8_t id_num)
 {
@@ -988,16 +945,16 @@ void estop(uint8_t id_num)
     float value_data[3]= {order_num,0,0};
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
-    send_command(id_num,0x08,data_list.byte_data,0);  // 需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num,0x08,data_list.byte_data,0);  // ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 }
-// 参数设置功能
+// �������ù���
 
 /**
- * @brief 设置电机ID号。
- * 改变电机ID号（掉电保存）
+ * @brief ���õ��ID�š�
+ * �ı���ID�ţ����籣�棩
  *
- * @param id_num 需要重新设置编号的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则多个电机会被设置成相同编号
- * @param new_id 新电机编号，电机ID号范围为1~63
+ * @param id_num ��Ҫ�������ñ�ŵĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ�����������������ᱻ���ó���ͬ���
+ * @param new_id �µ����ţ����ID�ŷ�ΧΪ1~63
  */
 void set_id(uint8_t id_num, int new_id)
 {
@@ -1005,12 +962,12 @@ void set_id(uint8_t id_num, int new_id)
     save_config(new_id);
 }
 /**
- * @brief 设置电机串口波特率。
- * 设置UART串口波特率（掉电保存）
+ * @brief ���õ�����ڲ����ʡ�
+ * ����UART���ڲ����ʣ����籣�棩
  *
- * @param id_num 需要重新设置波特率的电机编号,如果不知道当前电机编号，可以用0广播。
- * @param baud_rate uart串口波特率，支持9600,19200,57600,115200中任意一种，修改成功后需手动将主控UART波特率也修改为相同值
- * @note 这个串口波特率只对UART总线（TX/RX）接口有效，USB接口中的串口为虚拟串口，波特率不用设置，可以自动适应上位机的波特率。
+ * @param id_num ��Ҫ�������ò����ʵĵ�����,�����֪����ǰ�����ţ�������0�㲥��
+ * @param baud_rate uart���ڲ����ʣ�֧��9600,19200,57600,115200������һ�֣��޸ĳɹ������ֶ�������UART������Ҳ�޸�Ϊ��ֵͬ
+ * @note ������ڲ�����ֻ��UART���ߣ�TX/RX���ӿ���Ч��USB�ӿ��еĴ���Ϊ���⴮�ڣ������ʲ������ã������Զ���Ӧ��λ���Ĳ����ʡ�
  */
 void set_uart_baud_rate(uint8_t id_num, int baud_rate)
 {
@@ -1018,25 +975,25 @@ void set_uart_baud_rate(uint8_t id_num, int baud_rate)
     save_config(id_num);
 }
 /**
- * @brief 设置电机CAN波特率。
- * 设置CAN波特率（掉电保存）
+ * @brief ���õ��CAN�����ʡ�
+ * ����CAN�����ʣ����籣�棩
  *
- * @param id_num 需要重新设置波特率的电机编号,如果不知道当前电机编号，可以用0广播。
- * @param baud_rate CAN波特率，支持125k,250k,500k,1M中任意一种,修改成功后需手动将主控CAN波特率也修改为相同值。
+ * @param id_num ��Ҫ�������ò����ʵĵ�����,�����֪����ǰ�����ţ�������0�㲥��
+ * @param baud_rate CAN�����ʣ�֧��125k,250k,500k,1M������һ��,�޸ĳɹ������ֶ�������CAN������Ҳ�޸�Ϊ��ֵͬ��
  */
 void set_can_baud_rate(uint8_t id_num, int baud_rate)
 {
     write_property(id_num,21001,3,baud_rate);
     save_config(id_num);
 }
-/* @brief 设置电机模式。
-* 设置电机进入不同的控制模式。
+/* @brief ���õ��ģʽ��
+* ���õ�����벻ͬ�Ŀ���ģʽ��
 *
-* @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
-* @param mode 电机模式编号
-*             mode = 1: IDLE待机模式，电机将关掉PWM输出，电机卸载
-*             mode = 2: 闭环控制模式，set_angle， set_speed, set_torque函数必须在闭环控制模式下才能进行控制。（电机上电后的默认模式）
-* @note 模式3和模式4是用来校准电机和编码器参数，出厂前已完成校准，正常情况下不要使用。
+* @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+* @param mode ���ģʽ���
+*             mode = 1: IDLE����ģʽ��������ص�PWM��������ж��
+*             mode = 2: �ջ�����ģʽ��set_angle�� set_speed, set_torque���������ڱջ�����ģʽ�²��ܽ��п��ơ�������ϵ���Ĭ��ģʽ��
+* @note ģʽ3��ģʽ4������У׼����ͱ���������������ǰ�����У׼����������²�Ҫʹ�á�
 */
 void set_mode(uint8_t id_num, int mode)
 {
@@ -1046,10 +1003,10 @@ void set_mode(uint8_t id_num, int mode)
         write_property(id_num,30003,3, AXIS_STATE_CLOSED_LOOP_CONTROL);
 }
 /**
- * @brief 设置电机零点位置函数
- * 设置当前位置为电机输出轴零点，设置完后当前位置为0度
+ * @brief ���õ�����λ�ú���
+ * ���õ�ǰλ��Ϊ����������㣬�������ǰλ��Ϊ0��
  *
- * @param id_num 需要设置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
+ * @param id_num ��Ҫ���õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
  */
 void  set_zero_position(uint8_t id_num)
 {
@@ -1059,15 +1016,15 @@ void  set_zero_position(uint8_t id_num)
     float value_data[3]= {order_num,0,0};
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
-    send_command(id_num, 0x08, data_list.byte_data, 0); //需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num, 0x08, data_list.byte_data, 0); //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 }
 /**
- * @brief 设置GPIO控制接口模式
- * 设置电机预留的两个引脚模式，支持的模式有UART串口和Step/Dir接口，通过调用该函数进行切换并设置基本参数
+ * @brief ����GPIO���ƽӿ�ģʽ
+ * ���õ��Ԥ������������ģʽ��֧�ֵ�ģʽ��UART���ں�Step/Dir�ӿڣ�ͨ�����øú��������л������û�������
  *
- * @param id_num 需要设置的电机编号,如果不知道当前电机编号，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param mode 需要选择的模式，mode == 0 表示选择uart串口模式，mode == 1表示选择Step/Dir接口控制模式
- * @param param 当mode='tx_rx'时，param表示串口的波特率，支持9600、19200、57600、115200其中一种；当mode='step_dir'时，param表示电机转一圈对应的脉冲数，支持1-1024(必须是整数)
+ * @param id_num ��Ҫ���õĵ�����,�����֪����ǰ�����ţ�������0�㲥������������ж������������������ִ�иò�����
+ * @param mode ��Ҫѡ���ģʽ��mode == 0 ��ʾѡ��uart����ģʽ��mode == 1��ʾѡ��Step/Dir�ӿڿ���ģʽ
+ * @param param ��mode='tx_rx'ʱ��param��ʾ���ڵĲ����ʣ�֧��9600��19200��57600��115200����һ�֣���mode='step_dir'ʱ��param��ʾ���תһȦ��Ӧ����������֧��1-1024(����������)
  */
 void set_GPIO_mode(uint8_t id_num, uint8_t mode, uint32_t param)
 {
@@ -1096,14 +1053,14 @@ void set_GPIO_mode(uint8_t id_num, uint8_t mode, uint32_t param)
     reboot(id_num);
 }
 /**
- * @brief 设置电机软件限位极限位置
- * 设置电机预输出轴软件限位极限位置值，设置成功后电机在位置、速度及扭矩控制模式电机输出轴将被限制在[angle_min, angle_max]范围内
-*  （注意：当前输出轴位置必须在[angle_min, angle_max]范围内，否则将设置失败）
+ * @brief ���õ��������λ����λ��
+ * ���õ��Ԥ�����������λ����λ��ֵ�����óɹ�������λ�á��ٶȼ�Ť�ؿ���ģʽ�������Ὣ��������[angle_min, angle_max]��Χ��
+*  ��ע�⣺��ǰ�����λ�ñ�����[angle_min, angle_max]��Χ�ڣ���������ʧ�ܣ�
  *
- * @param id_num 需要设置的电机编号,如果不知道当前电机编号，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param angle_min 软件限位最小角度（该参数与axis0.output_shaft.circular_setpoint_min对应）
- * @param angle_max 软件限位最大角度（该参数与axis0.output_shaft.circular_setpoint_max对应）
- * @return 是否设置成功
+ * @param id_num ��Ҫ���õĵ�����,�����֪����ǰ�����ţ�������0�㲥������������ж������������������ִ�иò�����
+ * @param angle_min ������λ��С�Ƕȣ��ò�����axis0.output_shaft.circular_setpoint_min��Ӧ��
+ * @param angle_max ������λ���Ƕȣ��ò�����axis0.output_shaft.circular_setpoint_max��Ӧ��
+ * @return �Ƿ����óɹ�
  */
 int8_t set_angle_range(uint8_t id_num, float angle_min, float angle_max)
 {
@@ -1124,12 +1081,12 @@ int8_t set_angle_range(uint8_t id_num, float angle_min, float angle_max)
     }
 }
 /**
- * @brief设置速度轨迹模式下速度曲线类型
- * 设置速度轨迹模式，1表示梯形轨迹模式，2表示S形轨迹模式（指的是速度曲线形状，适用于位置控制-梯形轨迹模式）
+ * @brief�����ٶȹ켣ģʽ���ٶ���������
+ * �����ٶȹ켣ģʽ��1��ʾ���ι켣ģʽ��2��ʾS�ι켣ģʽ��ָ�����ٶ�������״��������λ�ÿ���-���ι켣ģʽ��
  *
- * @param id_num: 需要设置的电机编号,如果不知道当前电机编号，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param   mode: 1表示梯形轨迹，2表示S形轨迹（指的是速度曲线形状，适用于位置控制-梯形轨迹模式）
- * @return 无
+ * @param id_num: ��Ҫ���õĵ�����,�����֪����ǰ�����ţ�������0�㲥������������ж������������������ִ�иò�����
+ * @param   mode: 1��ʾ���ι켣��2��ʾS�ι켣��ָ�����ٶ�������״��������λ�ÿ���-���ι켣ģʽ��
+ * @return ��
 */
 void set_traj_mode(uint8_t id_num,int mode)
 {
@@ -1137,86 +1094,57 @@ void set_traj_mode(uint8_t id_num,int mode)
     TRAJ_MODE = mode;
 }
 /**
- * @brief 修改电机属性参数
- * 修改电机属性参数，这里的属性参数为电机控制参数
+ * @brief �޸ĵ�����Բ���
+ * �޸ĵ�����Բ�������������Բ���Ϊ������Ʋ���
  *
- * @param id_num 需要修改的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- * @param param_address  需要读取的属性参数的地址，例如"vbus_voltage"，"axis0.config.can_node_id"等，具体参数名称见《常用参数及其地址表》中属性名称。
- * @param param_type 需要读取的属性参数数据类型:0-float,1-unsigned short int,2-short int,3-unsigned int,4-int。
- * @param value 对应参数的目标值。
+ * @param id_num ��Ҫ�޸ĵĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ * @param param_address  ��Ҫ��ȡ�����Բ����ĵ�ַ������"vbus_voltage"��"axis0.config.can_node_id"�ȣ�����������Ƽ������ò��������ַ�������������ơ�
+ * @param param_type ��Ҫ��ȡ�����Բ�����������:0-float,1-unsigned short int,2-short int,3-unsigned int,4-int��
+ * @param value ��Ӧ������Ŀ��ֵ��
  */
 void write_property(uint8_t id_num,unsigned short param_address,int8_t param_type,float value)
 {
     float value_data[3]= {param_address,param_type,value};
     int type_data[3]= {1,1,param_type};
     format_data(value_data,type_data,3,"encode");
-    send_command(id_num, 0x1F,data_list.byte_data,0);  //需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num, 0x1F,data_list.byte_data,0);  //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 }
 /**
- * @brief 读取电机ID。
+ * @brief ��ȡ���ID��
  *
- * @param id_num 需要读取的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则将报错。
- * @return 电机的 ID 号
+ * @param id_num ��Ҫ��ȡ�ĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ����������򽫱�����
+ * @return ����� ID ��
  */
 uint8_t get_id(uint8_t id_num)
 {
     return read_property(id_num,31001,3);
 }
 /**
- * @brief 读取电机的当前位置和速度
- * 读取电机输出轴当前位置和速度列表，单位分别为度（°）和转每分钟(r/min)
+ * @brief ��ȡ����ĵ�ǰλ�ú��ٶ�
+ * ��ȡ�������ᵱǰλ�ú��ٶ��б�����λ�ֱ�Ϊ�ȣ��㣩��תÿ����(r/min)
  *
- *同时作为实时状态（实时位置、实时速度、实时扭矩、是否到达目标位置、是否报错）快速读取接口，进行实时控制时可采用该函数进行快速读取电机状态
- *注：1. 但是需要将MOTOR_NUM变量根据最大的电机ID号进行调整，保证MOTOR_NUM大于或等于最大的电机ID号；
-      2. enable_reply_state值不影响快速读取接口，只影响发送控制指令时是否实时返回电机状态；
+ *ͬʱ��Ϊʵʱ״̬��ʵʱλ�á�ʵʱ�ٶȡ�ʵʱŤ�ء��Ƿ񵽴�Ŀ��λ�á��Ƿ񱨴������ٶ�ȡ�ӿڣ�����ʵʱ����ʱ�ɲ��øú������п��ٶ�ȡ���״̬
+ *ע��1. ������Ҫ��MOTOR_NUM�����������ĵ��ID�Ž��е�������֤MOTOR_NUM���ڻ�������ĵ��ID�ţ�
+      2. enable_reply_stateֵ��Ӱ����ٶ�ȡ�ӿڣ�ֻӰ�췢�Ϳ���ָ��ʱ�Ƿ�ʵʱ���ص��״̬��
 
- * @return 电机的位置和速度
- * @param id_num 需要读取的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则将报错。
- * @return struct servo_state 储存电机位置和速度的结构体
+ * @return �����λ�ú��ٶ�
+ * @param id_num ��Ҫ��ȡ�ĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ����������򽫱�����
+ * @return struct servo_state ������λ�ú��ٶȵĽṹ��
  */
 struct servo_state get_state(uint8_t id_num)
 {
     struct servo_state state = {0, 0};
-
-    /* 关 CAN RX 中断，防止 ISR 与查询过程竞争 rx_buffer / READ_FLAG */
-    HAL_NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
-
-    /* 排空 FIFO 残留 (上一次 set_angle 的 ACK 可能还在) */
-    while (hcan.Instance->RF0R & CAN_RF0R_FMP0)
-    {
-        CAN_RxHeaderTypeDef _hdr;
-        uint8_t _dummy[8];
-        HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &_hdr, _dummy);
-    }
-    READ_FLAG = 0;
-
-    /* 发送状态查询 */
     float value_data[3]= {0x00,0x00,0};
     int type_data[3]= {1,1,3};
     format_data(value_data,type_data,3,"encode");
-    send_command(id_num,0x1E,data_list.byte_data,0);
-    READ_FLAG=0;
-
-    /* 等待 1ms 让飞行中的 torque ACK 进入 FIFO，再排空一次 */
-    SERVO_DELAY_US(1000);
-    while (hcan.Instance->RF0R & CAN_RF0R_FMP0)
-    {
-        CAN_RxHeaderTypeDef _hdr;
-        uint8_t _dummy[8];
-        HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, &_hdr, _dummy);
-    }
-    READ_FLAG = 0;
-
-    HAL_NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);   /* 恢复中断, 此时 FIFO 为空, 下一个到达的必然是 0x1E 回复 */
-
+    send_command(id_num,0x1E,data_list.byte_data,0);// ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
+		READ_FLAG=0;
     receive_data();
-
-
-    if(id_num<=MOTOR_NUM)//id_num不能为0
+    if(id_num<=MOTOR_NUM)//id_num����Ϊ0
     {
 			if(READ_FLAG==1)
 			{
-					if(id_num==0)  //如果ID号为0，则通过返回数据帧的ID信息更新ID号
+					if(id_num==0)  //���ID��Ϊ0����ͨ����������֡��ID��Ϣ����ID��
 					{
 						id_num = (uint8_t)((can_id & 0x07E0) >> 5)&0xFF;
 					}
@@ -1243,11 +1171,11 @@ struct servo_state get_state(uint8_t id_num)
 }
 
 /**
- * @brief 读取电机的当前电压和电流
- * 读取电机当前电压和q轴电流列表，单位分别为伏（V）和安(A)
+ * @brief ��ȡ����ĵ�ǰ��ѹ�͵���
+ * ��ȡ�����ǰ��ѹ��q������б�����λ�ֱ�Ϊ����V���Ͱ�(A)
  *
- * @param id_num 需要读取的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则将报错。
- * @return struct servo_volcur 储存电机电压和电流的结构体
+ * @param id_num ��Ҫ��ȡ�ĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ����������򽫱�����
+ * @return struct servo_volcur ��������ѹ�͵����Ľṹ��
  */
 struct servo_volcur get_volcur(uint8_t id_num)
 {
@@ -1260,14 +1188,14 @@ struct servo_volcur get_volcur(uint8_t id_num)
     return volcur;
 }
 /**
- * @brief 读取GPIO控制接口模式
- * 读取电机预留的两个引脚当前模式及参数，支持的模式有UART串口和Step/Dir接口
+ * @brief ��ȡGPIO���ƽӿ�ģʽ
+ * ��ȡ���Ԥ�����������ŵ�ǰģʽ��������֧�ֵ�ģʽ��UART���ں�Step/Dir�ӿ�
  *
- * @param id_num 需要读取的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则将报错。
- * @param enable_uart 是否为 uart 模式
- * @param enable_step_dir 是否为 step dir 模式
- * @param n 串口波特率或脉冲数/每圈
- * @return 是否读取成功
+ * @param id_num ��Ҫ��ȡ�ĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ����������򽫱�����
+ * @param enable_uart �Ƿ�Ϊ uart ģʽ
+ * @param enable_step_dir �Ƿ�Ϊ step dir ģʽ
+ * @param n ���ڲ����ʻ�������/ÿȦ
+ * @return �Ƿ��ȡ�ɹ�
  */
 int8_t get_GPIO_mode(uint8_t id_num, uint8_t *enable_uart, uint8_t *enable_step_dir, uint32_t *n)
 {
@@ -1293,13 +1221,13 @@ int8_t get_GPIO_mode(uint8_t id_num, uint8_t *enable_uart, uint8_t *enable_step_
     return 0;
 }
 /**
- * @brief 读取电机属性参数
- * 读取电机属性参数，这里的属性参数包括电机状态量及电机控制参数
+ * @brief ��ȡ������Բ���
+ * ��ȡ������Բ�������������Բ����������״̬����������Ʋ���
  *
- * @param id_num 需要读取的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则将报错。
- * @param param_address  需要读取的属性参数的地址，例如"vbus_voltage"，"axis0.config.can_node_id"等，具体参数名称见《常用参数及其地址表》中属性名称。
- * @param param_type 需要读取的属性参数数据类型:0-float,1-unsigned short int,2-short int,3-unsigned int,4-int。
- * @return 对应属性参数的值
+ * @param id_num ��Ҫ��ȡ�ĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ����������򽫱�����
+ * @param param_address  ��Ҫ��ȡ�����Բ����ĵ�ַ������"vbus_voltage"��"axis0.config.can_node_id"�ȣ�����������Ƽ������ò��������ַ�������������ơ�
+ * @param param_type ��Ҫ��ȡ�����Բ�����������:0-float,1-unsigned short int,2-short int,3-unsigned int,4-int��
+ * @return ��Ӧ���Բ�����ֵ
  */
 float read_property(uint8_t id_num,int param_address,int param_type)
 {
@@ -1307,7 +1235,7 @@ float read_property(uint8_t id_num,int param_address,int param_type)
     int type_data[3]= {1,1,3};
     format_data(value_data,type_data,3,"encode");
     READ_FLAG=0;
-    send_command(id_num,0x1E,data_list.byte_data,0);// 需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num,0x1E,data_list.byte_data,0);// ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 
     receive_data();
 
@@ -1328,13 +1256,15 @@ float read_property(uint8_t id_num,int param_address,int param_type)
 }
 
 /*
-其他系统辅助函数，一般情况下无需使用
+����ϵͳ����������һ�����������ʹ��
 */
+
+
 /**
- * @brief 清除错误标志函数
- * 一旦电机运行过程中出现任何错误，电机将进入IDLE模式，如果要恢复正常控制模式，需要首先用clear_error清除错误标志后,然后用set_mode函数将模式设置为2（闭环控制模式）。
+ * @brief ��������־����
+ * һ��������й����г����κδ��󣬵��������IDLEģʽ�����Ҫ�ָ���������ģʽ����Ҫ������clear_error��������־��,Ȼ����set_mode������ģʽ����Ϊ2���ջ�����ģʽ����
  *
- * @param id_num 需要清除错误标志的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
+ * @param id_num ��Ҫ��������־�ĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
  */
 void clear_error(uint8_t id_num)
 {
@@ -1342,15 +1272,17 @@ void clear_error(uint8_t id_num)
     float value_data[3]= {order_num,0,0};
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
-    send_command(id_num,0x08, data_list.byte_data, 0);  //需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num,0x08, data_list.byte_data, 0);  //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 }
+
+
 /**
- * @brief 打印电机错误编号
- * 读取电机错误信息编码，如果错误编码为0，表示无异常。如果错误编码不为0，则表示存在故障。
+ * @brief ��ӡ���������
+ * ��ȡ���������Ϣ���룬����������Ϊ0����ʾ���쳣�����������벻Ϊ0�����ʾ���ڹ��ϡ�
  *
- * @param id_num 需要读取的电机编号,如果不知道当前电机编号，可以用0广播，但是这时总线上只能连一个电机，否则将报错。
- * @return 电机抛出的错误信息编号，如果为负数表示在读取对应错误信息时通信失败，未成功读取到数据
- *         0 无任何错误
+ * @param id_num ��Ҫ��ȡ�ĵ�����,�����֪����ǰ�����ţ�������0�㲥��������ʱ������ֻ����һ����������򽫱�����
+ * @return ����׳��Ĵ�����Ϣ��ţ����Ϊ������ʾ�ڶ�ȡ��Ӧ������Ϣʱͨ��ʧ�ܣ�δ�ɹ���ȡ������
+ *         0 ���κδ���
  *         1 axis_error
  *         2 motor_error
  *         3 controller_error
@@ -1402,10 +1334,10 @@ int8_t dump_error(uint8_t id_num)
 }
 
 /**
- * @brief 保存配置函数
- * 正常情况下，通过write_property修改的属性电机上电重启之后，会恢复为修改前的直，如果想永久保存，则需要用save_config函数将相关参数保存到flash中，掉电不丢失。
+ * @brief �������ú���
+ * ��������£�ͨ��write_property�޸ĵ����Ե���ϵ�����֮�󣬻�ָ�Ϊ�޸�ǰ��ֱ����������ñ��棬����Ҫ��save_config��������ز������浽flash�У����粻��ʧ��
  *
- * @param id_num 需要保存配置的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
+ * @param id_num ��Ҫ�������õĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
  */
 void save_config(uint8_t id_num)
 {
@@ -1416,13 +1348,15 @@ void save_config(uint8_t id_num)
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
 
-    send_command(id_num,0x08, data_list.byte_data,0);  //需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num,0x08, data_list.byte_data,0);  //��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
+
+
 }
 /**
- * @brief 电机重启函数
- * 电机软件重启，效果与重新上电类似。
+ * @brief �����������
+ * �������������Ч���������ϵ����ơ�
  *
- * @param id_num 需要重启的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
+ * @param id_num ��Ҫ�����ĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
  */
 void reboot(uint8_t id_num)
 {
@@ -1433,15 +1367,15 @@ void reboot(uint8_t id_num)
     int type_data[3]= {3,1,1};
     format_data(value_data,type_data,3,"encode");
 
-    send_command(id_num,0x08, data_list.byte_data,0);  // 需要用标准帧（数据帧）进行发送，不能用远程帧
+    send_command(id_num,0x08, data_list.byte_data,0);  // ��Ҫ�ñ�׼֡������֡�����з��ͣ�������Զ��֡
 
 }
 /**
- * @brief 单个电机等待函数
- * 延时等待直到给定电机到达目标位置(只对角度控制指令有效)
+ * @brief ��������ȴ�����
+ * ��ʱ�ȴ�ֱ�������������Ŀ��λ��(ֻ�ԽǶȿ���ָ����Ч)
  *
- * @param id_num 需要重启的电机ID编号,如果不知道当前电机ID，可以用0广播，如果总线上有多个电机，则多个电机都会执行该操作。
- ** @return 无
+ * @param id_num ��Ҫ�����ĵ��ID���,�����֪����ǰ���ID��������0�㲥������������ж������������������ִ�иò�����
+ ** @return ��
  */
 void position_done(uint8_t id_num)
 {
@@ -1452,11 +1386,11 @@ void position_done(uint8_t id_num)
     }
 }
 /**
- * @brief 多个电机等待函数
- * 程序等待（阻塞）直到所有电机都到达目标位置(只对角度控制指令有效)
+ * @brief �������ȴ�����
+ * ����ȴ���������ֱ�����е��������Ŀ��λ��(ֻ�ԽǶȿ���ָ����Ч)
  *
- * @param id_list: 电机编号组成的列表
- ** @return 无
+ * @param id_list: ��������ɵ��б�
+ ** @return ��
  */
 void positions_done(uint8_t *id_list,size_t n)
 {
@@ -1465,89 +1399,3 @@ void positions_done(uint8_t *id_list,size_t n)
         position_done(id_list[i]);
     }
 }
-
-/**
- * @brief  多圈角度解算
- * @note   根据相邻两次 raw_angle 的跳变方向检测跨圈，累积 laps，
- *         输出解绕后的 angle_infinite = raw_angle + laps * 360°。
- *         要求调用频率足够高 (>= 2× 转速)，确保每次跳变 < 180°。
- * @param  motor      电机数据结构体指针
- * @param  raw_angle  驱动器返回的原始角度 (°)，假设范围 [0, 360)
- */
-void motor_update_infinite_angle(Dr_MOTOR_DATA_Typdef *motor, float raw_angle)
-{
-    float delta = raw_angle - motor->pos_last;
-
-    /* driver 角度范围 [-2500, +2500]
-     * 正转超过 +2500 → 跳变到 -2500 (delta < -2500), laps++
-     * 反转超过 -2500 → 跳变到 +2500 (delta > +2500), laps-- */
-    if (delta < -2500.0f)
-        motor->laps++;
-    else if (delta > 2500.0f)
-        motor->laps--;
-
-    motor->pos_last       = raw_angle;
-    motor->pos            = raw_angle;
-    motor->angle_infinite = raw_angle + motor->laps * 5000.0f;
-}
-
-/**
- * @brief  异步电机状态查询（非阻塞，不等待回复）
- * @note   发送 0x1E 查询指令前排空 FIFO 并置位 state_pending，
- *         确保 ISR 的下一条消息就是状态回复，不会与 torque ACK 混淆。
- * @param  id_num 电机 ID 编号
- */
-void query_state_async(uint8_t id_num)
-{
-    /* 发送 0x1E 查询 */
-    float value_data[3] = {0x00, 0x00, 0};
-    int   type_data[3]  = {1, 1, 3};
-    format_data(value_data, type_data, 3, "encode");
-    send_command(id_num, 0x1E, data_list.byte_data, 0);
-
-    /* 等 query 真正传输完成 (CAN 帧 ~108µs @1Mbps),
-     * 确保电机在收到 torque 之前已收到 query,
-     * 否则 torque ID(61) < query ID(62), 仲裁会导致 torque 先发出 */
-    while ((hcan.Instance->TSR & (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2))
-           != (CAN_TSR_TME0 | CAN_TSR_TME1 | CAN_TSR_TME2))
-    {
-        __NOP();
-    }
-
-    /* 标记: 下一条 CAN 消息必为状态回复 */
-    state_pending = 1;
-}
-
-/**
- * @brief  CAN 中断内直接解码状态回复（ISR 安全: 无阻塞、无 malloc）
- * @note   由 HAL_CAN_RxFifo0MsgPendingCallback 调用，
- *         绕过 data_list 全局变量，避免与主循环 format_data() 竞争。
- * @param  rx_can_id  CAN 帧标准 ID
- * @param  rx_data    8 字节原始数据 (rx_buffer)
- */
-void motor_state_update_from_isr(uint16_t rx_can_id, const uint8_t *rx_data)
-{
-    uint8_t id_num = (uint8_t)((rx_can_id & 0x07E0) >> 5) & 0xFF;
-
-    if (id_num == 0 || id_num > MOTOR_NUM)
-        return;
-
-    /* 直接解码, 不使用 format_data/data_list */
-    float angle;
-    ((uint8_t *)(&angle))[0] = rx_data[0];
-    ((uint8_t *)(&angle))[1] = rx_data[1];
-    ((uint8_t *)(&angle))[2] = rx_data[2];
-    ((uint8_t *)(&angle))[3] = rx_data[3];
-
-    int16_t speed_raw;
-    ((uint8_t *)(&speed_raw))[0] = rx_data[4];
-    ((uint8_t *)(&speed_raw))[1] = rx_data[5];
-
-    int16_t torque_raw;
-    ((uint8_t *)(&torque_raw))[0] = rx_data[6];
-    ((uint8_t *)(&torque_raw))[1] = rx_data[7];
-
-    const float factor = 0.01f;
-#if MOTOR_NUM >= 1
-    motor_state[id_num - 1][0] = angle;
-    motor_state[i

@@ -1,20 +1,22 @@
 
 
 GraphedExpression="globe_time_ms", DisplayFormat=DISPLAY_FORMAT_DEC, Color=#e56a6f, Show=0
-OpenDocument="VOFA.c", FilePath="d:/smartcar/dr_arm/Usercode/Bsp/VOFA.c", Line=0
-OpenDocument="DrMotor.c", FilePath="d:/smartcar/dr_arm/Usercode/Bsp/DrMotor.c", Line=58
-OpenDocument="impedance.c", FilePath="d:/smartcar/dr_arm/Usercode/Algorithm/impedance.c", Line=33
 OpenDocument="startup_stm32f103xb.s", FilePath="d:/smartcar/dr_arm/MDK-ARM/startup_stm32f103xb.s", Line=123
+OpenDocument="can.c", FilePath="d:/smartcar/dr_arm/Core/Src/can.c", Line=33
+OpenDocument="star.c", FilePath="d:/smartcar/dr_arm/Usercode/Star/star.c", Line=14
+OpenDocument="ALLinit.c", FilePath="d:/smartcar/dr_arm/Usercode/Star/ALLinit.c", Line=6
+OpenDocument="DrMotor.c", FilePath="d:/smartcar/dr_arm/Usercode/Bsp/DrMotor.c", Line=68
+OpenDocument="impedance.c", FilePath="d:/smartcar/dr_arm/Usercode/Algorithm/impedance.c", Line=33
 OpenDocument="main.c", FilePath="d:/smartcar/dr_arm/Core/Src/main.c", Line=60
 OpenDocument="gpio.c", FilePath="d:/smartcar/dr_arm/Core/Src/gpio.c", Line=20
 OpenDocument="bspcan.c", FilePath="d:/smartcar/dr_arm/Usercode/Bsp/bspcan.c", Line=20
-OpenDocument="ALLinit.c", FilePath="d:/smartcar/dr_arm/Usercode/Star/ALLinit.c", Line=6
+OpenDocument="stm32f103xb.h", FilePath="d:/smartcar/dr_arm/Drivers/CMSIS/Device/ST/STM32F1xx/Include/stm32f103xb.h", Line=0
 OpenDocument="dma.c", FilePath="d:/smartcar/dr_arm/Core/Src/dma.c", Line=7
-OpenDocument="star.c", FilePath="d:/smartcar/dr_arm/Usercode/Star/star.c", Line=0
+OpenDocument="VOFA.c", FilePath="d:/smartcar/dr_arm/Usercode/Bsp/VOFA.c", Line=0
 OpenToolbar="Debug", Floating=0, x=0, y=0
 OpenWindow="Source Files", DockArea=LEFT, x=0, y=0, w=444, h=607, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
-OpenWindow="Global Data", DockArea=RIGHT, x=0, y=1, w=588, h=297, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
-OpenWindow="Watched Data 1", DockArea=RIGHT, x=0, y=0, w=588, h=309, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Global Data", DockArea=RIGHT, x=0, y=1, w=588, h=302, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
+OpenWindow="Watched Data 1", DockArea=RIGHT, x=0, y=0, w=588, h=304, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 OpenWindow="Data Sampling", DockArea=BOTTOM, x=0, y=0, w=264, h=317, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0, VisibleTab=0, UniformSampleSpacing=0
 OpenWindow="Console", DockArea=BOTTOM, x=1, y=0, w=1655, h=317, FilterBarShown=0, TotalValueBarShown=0, ToolBarShown=0
 SmartViewPlugin="", Page="", Toolbar="Hidden", Window="SmartView 1"
@@ -36,3 +38,6 @@ WatchedExpression="can_id", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Win
 WatchedExpression="READ_FLAG", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Window=Watched Data 1
 WatchedExpression="motor_impedance", Window=Watched Data 1
 WatchedExpression="huart1", RefreshRate=5, Window=Watched Data 1
+WatchedExpression="rx_buffer", RefreshRate=5, Window=Watched Data 1
+WatchedExpression=" hcan", Window=Watched Data 1
+WatchedExpression="reply_state_error", RefreshRate=5, Window=Watched Data 1

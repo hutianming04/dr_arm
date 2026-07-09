@@ -14,7 +14,6 @@ extern "C" {
 extern volatile uint8_t  rx_buffer[8];
 extern volatile uint16_t can_id;
 extern volatile int8_t   READ_FLAG;
-extern volatile uint8_t  state_pending;
 
 /* Exported functions --------------------------------------------------------*/
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan);

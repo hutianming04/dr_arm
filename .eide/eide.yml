@@ -32,14 +32,14 @@ virtualFolder:
             - name: Bsp
               files:
                 - path: Usercode/Bsp/bspcan.c
-                - path: Usercode/Bsp/DrMotor.c
                 - path: Usercode/Bsp/VOFA.c
+                - path: Usercode/Bsp/DrMotor.c
               folders:
                 - name: Inc
                   files:
                     - path: Usercode/Bsp/Inc/bspcan.h
-                    - path: Usercode/Bsp/Inc/DrMotor.h
                     - path: Usercode/Bsp/Inc/VOFA.h
+                    - path: Usercode/Bsp/Inc/DrMotor.h
                   folders: []
             - name: App
               files: []
