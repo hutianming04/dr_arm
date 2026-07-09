@@ -1,0 +1,101 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "编译: EIDE",
+            "command": "${command:eide.project.build}",
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "EIDE 编译 STM32F103 项目"
+        },
+        {
+            "type": "shell",
+            "label": "烧录: OpenOCD",
+            "command": "C:\\Tools\\xpack-openocd\\xpack-openocd-0.12.0-7\\bin\\openocd.exe",
+            "args": [
+                "-s",
+                "C:\\Tools\\xpack-openocd\\xpack-openocd-0.12.0-7\\openocd\\scripts",
+                "-f",
+                "openocd.cfg"
+            ],
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [],
+            "detail": "通过 CMSIS-DAP 烧录固件到 STM32F103"
+        },
+        {
+            "type": "shell",
+            "label": "OpenOCD: GDB Server",
+            "command": "C:\\Tools\\xpack-openocd\\xpack-openocd-0.12.0-7\\bin\\openocd.exe",
+            "args": [
+                "-s",
+                "C:\\Tools\\xpack-openocd\\xpack-openocd-0.12.0-7\\openocd\\scripts",
+                "-f",
+                "openocd_debug.cfg"
+            ],
+            "isBackground": true,
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "Info : Listening on port 3333 for gdb connections",
+                    "file": 1,
+                    "line": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Listening on port 3333",
+                    "endsPattern": "Listening on port 3333"
+                }
+            },
+            "detail": "启动 OpenOCD GDB Server (CMSIS-DAP → STM32F103)"
+        },
+        {
+            "type": "shell",
+            "label": "Ozone: 启动",
+            "command": "C:\\Program Files\\SEGGER\\Ozone\\Ozone.exe",
+            "args": [
+                "${workspaceFolder}\\.vscode\\dr_arm.jdebug"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [],
+            "detail": "Ozone → GDB Server → DAPLink → STM32"
+        },
+        {
+            "label": "编译 + 烧录",
+            "dependsOn": [
+                "编译: EIDE",
+                "烧录: OpenOCD"
+            ],
+            "dependsOrder": "sequence",
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "编译后自动烧录"
+        },
+        {
+            "label": "Ozone 调试 (全流程)",
+            "dependsOn": [
+                "OpenOCD: GDB Server",
+                "Ozone: 启动"
+            ],
+            "dependsOrder": "sequence",
+            "group": "none",
+            "problemMatcher": [],
+            "detail": "先启动 GDB Server，再启动 Ozone"
+        }
+    ]
+}

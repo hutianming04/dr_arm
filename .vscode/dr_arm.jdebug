@@ -1,0 +1,36 @@
+/*********************************************************************
+*       Ozone 调试配置 — dr_arm (STM32F103)
+*       连接方式: Ozone → OpenOCD GDB Server → DAPLink → STM32
+*
+*       使用前请先启动 OpenOCD GDB Server:
+*         Ctrl+Shift+P → Tasks: Run Task → OpenOCD: GDB Server
+*********************************************************************/
+
+void OnProjectLoad (void) {
+  //
+  // 目标芯片
+  //
+  Project.SetDevice("STM32F103C8");
+
+  //
+  // GDB Server 连接 (OpenOCD → DAPLink → STM32)
+  //
+  Project.SetHostIF("GDB_Server", "localhost:3333");
+  Project.SetTargetIF("SWD");
+  Project.SetTIFSpeed("4 MHz");
+
+  //
+  // 加载 ELF
+  //
+  File.Open("D:/smartcar/dr_arm/build/dr_arm/dr_arm.axf");
+}
+
+void AfterTargetDownload (void) {
+  //
+  // Ozone 下载后会自动复位，无需额外脚本
+  //
+}
+
+void BeforeTargetReset (void) {
+  //
+}

@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /d/smartcar/dr_arm/Usercode/Star/Inc)",
+      "Bash(xxd)",
+      "Bash(iconv -f GBK -t UTF-8 /d/smartcar/dr_arm/DrMotor.c)",
+      "Read(//tmp/**)",
+      "Bash(sed -i -e 's|#include \"can.h\"|#include \"bspcan.h\"|' -e '/#include \"FreeRTOS.h\"/d' -e '/#include \"task.h\"/d' /tmp/DrMotor_utf8.c)",
+      "Bash(sed -i -e 's|#define SERVO_MALLOC\\(size\\) pvPortMalloc\\(size\\)|#define SERVO_MALLOC\\(size\\) malloc\\(size\\)|' -e 's|#define SERVO_FREE\\(ptr\\) vPortFree\\(ptr\\)|#define SERVO_FREE\\(ptr\\) free\\(ptr\\)|' -e 's|#define SERVO_DELAY\\(n\\) vTaskDelay\\(n\\)|#define SERVO_DELAY\\(n\\) HAL_Delay\\(n\\)|' /tmp/DrMotor_utf8.c)",
+      "Bash(where pyocd *)",
+      "Bash(pyocd --version)",
+      "Bash(arm-none-eabi-gdb --version)",
+      "Bash(where python *)",
+      "Bash(pip --version)",
+      "Bash(\"C:/Program Files/SEGGER/Ozone/UM08025_Ozone.pdf\")",
+      "WebSearch",
+      "WebFetch(domain:www.segger.cn)",
+      "WebFetch(domain:wiki.segger.com)",
+      "WebFetch(domain:www.segger.com)",
+      "WebFetch(domain:gitlab.com)",
+      "Bash(python -c ' *)",
+      "Bash(python *)"
+    ],
+    "additionalDirectories": [
+      "D:\\smartcar\\dr_arm\\Usercode\\Star\\Inc"
+    ]
+  }
+}
