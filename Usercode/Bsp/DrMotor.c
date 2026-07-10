@@ -58,9 +58,19 @@ void send_command(uint8_t id_num, char cmd, unsigned char *data,uint8_t rt )
     Can_Send_Msg(id_list, 8, data);
 }
 
-void SERVO_DELAY_US(uint8_t tick)
+void SERVO_DELAY_US(uint32_t us)
 {
-    for(uint8_t t = 0; t<tick; t++);
+    /* DWT 周期计数器，72MHz 下 1 周期 = 1/72 μs ≈ 13.9ns */
+    static uint8_t dwt_ready = 0;
+    if (!dwt_ready)
+    {
+        CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+        DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+        dwt_ready = 1;
+    }
+    uint32_t start = DWT->CYCCNT;
+    uint32_t ticks = us * (SystemCoreClock / 1000000UL);
+    while ((DWT->CYCCNT - start) < ticks);
 }
 
 //CAN���պ���
@@ -335,16 +345,24 @@ void format_data( float *value_data, int *type_data,int length, char * str)
  */
 void reply_state(uint8_t id_num)
 {
-    if(enable_replay_state&&id_num<=MOTOR_NUM)   //id_num����Ϊ0
+    if(enable_replay_state&&id_num<=MOTOR_NUM)   //id_num不能为0
     {
         READ_FLAG=0;
         receive_data();
         if (READ_FLAG == 1)
         {
-						if(id_num==0)  //���ID��Ϊ0����ͨ����������֡��ID��Ϣ����ID��
-						{
-							id_num = (uint8_t)((can_id & 0x07E0) >> 5)&0xFF;
-						}
+            uint8_t rx_id = (uint8_t)((can_id & 0x07E0) >> 5) & 0xFF;
+            if(id_num==0)  //如果ID号为0，则通过解析CAN帧的ID信息确定ID号
+            {
+                id_num = rx_id;
+            }
+            else if(rx_id != 0 && rx_id != id_num)
+            {
+                /* 收到其他电机的回复，不是请求的电机，丢弃并报错 */
+                READ_FLAG = -1;
+                reply_state_error += 1;
+                return;
+            }
             float factor = 0.01f;
             float value_data[3]= {0,0,0};
             int type_data[3]= {0,2,2};

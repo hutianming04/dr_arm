@@ -118,7 +118,7 @@ int main(void)
   /* ── 电机 1 ── */
   PID_Init(&pid_pos[0], 1.0f, 0.0f, 0.0f, 0.001f,
            0.0f, TAU_ALPHA_08, 3600.0f, -3600.0f);
-  PID_Init(&pid_vel[0], 1.0f, 0.0f, 0.01f, 0.001f,
+  PID_Init(&pid_vel[0], 1.0f, 0.0f, 0.0f, 0.001f,
            TAU_ALPHA_08, 0.0f, 3600.0f, -3600.0f);
 
   /* ── 电机 2 ── */
@@ -157,47 +157,20 @@ int main(void)
     {
         motor_update_flag = 0;
         float t = (float)globe_time_ms * 0.001f; /* 秒 */
-        float torque_list[MOTOR_COUNT];
 
-        /* ── 电机 1 串级 PID ── */
-        target[0] = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
-        {
-            float vel_cmd = PID_Update(&pid_pos[0], target[0], motor_state[0][0]);
-            torque_list[0] = PID_Update(&pid_vel[0], vel_cmd, motor_state[0][1]);
-        }
+        /* TDM 轮询: 每 1ms 只控一个电机, 5ms 一轮 */
+        uint8_t idx = globe_time_ms % MOTOR_COUNT;
 
-        /* ── 电机 2 串级 PID ── */
-        target[1] = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
-        {
-            float vel_cmd = PID_Update(&pid_pos[1], target[1], motor_state[1][0]);
-            torque_list[1] = PID_Update(&pid_vel[1], vel_cmd, motor_state[1][1]);
-        }
+        target[idx] = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
 
-        /* ── 电机 3 串级 PID ── */
-        target[2] = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
-        {
-            float vel_cmd = PID_Update(&pid_pos[2], target[2], motor_state[2][0]);
-            torque_list[2] = PID_Update(&pid_vel[2], vel_cmd, motor_state[2][1]);
-        }
+        /* ── 串级 PID ── */
+        float vel_cmd = PID_Update(&pid_pos[idx], target[idx], motor_state[idx][0]);
+        float torque_cmd = PID_Update(&pid_vel[idx], vel_cmd, motor_state[idx][1]);
 
-        /* ── 电机 4 串级 PID ── */
-        target[3] = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
-        {
-            float vel_cmd = PID_Update(&pid_pos[3], target[3], motor_state[3][0]);
-            torque_list[3] = PID_Update(&pid_vel[3], vel_cmd, motor_state[3][1]);
-        }
+        set_torque(idx + 1, torque_cmd, 0.0f, 1);
 
-        /* ── 电机 5 串级 PID ── */
-        target[4] = 180.0f * sinf(2.0f * 3.1415926f * 0.2f * t);
-        {
-            float vel_cmd = PID_Update(&pid_pos[4], target[4], motor_state[4][0]);
-            torque_list[4] = PID_Update(&pid_vel[4], vel_cmd, motor_state[4][1]);
-        }
-
-        set_torques(motor_id_list, torque_list, 0.0f, 1, MOTOR_COUNT);
-
-        VOFA_justfloat(target[1], motor_state[1][0],
-                       motor_state[1][1], torque_list[1],
+        VOFA_justfloat(target[0], motor_state[0][0],
+                       motor_state[0][1], torque_cmd,
                        0, 0, 0, 0, 0, 0);
     }
   }
