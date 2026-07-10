@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "bspcan.h"
-#define MOTOR_NUM  1
+#define MOTOR_NUM  5
 struct servo_state
 {
     float angle;
@@ -63,11 +63,11 @@ typedef struct
 	float tor;
 	float kp;
 	float kd;
-    int16_t Angle_last; // 上一个角度值
-    int16_t Angle_now;  // 现在的角度值
-    int16_t Speed_last; // 上一个速度值
-    int16_t Speed_now;  // 现在的速度值
-	  int16_t acceleration;//加速度
+    int16_t Angle_last; // 锟斤拷一锟斤拷锟角讹拷值
+    int16_t Angle_now;  // 锟斤拷锟节的角讹拷值
+    int16_t Speed_last; // 锟斤拷一锟斤拷锟劫讹拷值
+    int16_t Speed_now;  // 锟斤拷锟节碉拷锟劫讹拷值
+	  int16_t acceleration;//锟斤拷锟劫讹拷
     float current;
     int32_t Angle_Infinite;
     int64_t Stuck_Time;
@@ -82,7 +82,7 @@ typedef struct
 //	uint16_t initialAngle;
 //		float ralativeAngle;
 //	int16_t round;
-//		int32_t reality;////连续编码器
+//		int32_t reality;////锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
 
 }Dr_MOTOR_DATA_Typdef;
 
