@@ -43,6 +43,7 @@
 /* USER CODE BEGIN PD */
 /* Ts = 1ms, alpha = 0.8 -> tau = Ts*(1-alpha)/alpha = 0.00025 */
 #define TAU_ALPHA_08  0.00025f
+#define OFFLINE_THRESHOLD  50   /* 连续 50 次无回复判定离线 (50×2ms=100ms) */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -58,6 +59,10 @@ float target[MOTOR_COUNT] = {0};              /* 全局目标角度 (°), 每个
 PID_TypeDef pid_pos[MOTOR_COUNT];             /* 外环: 位置 → 速度指令 (r/min), 每个电机独立 */
 PID_TypeDef pid_vel[MOTOR_COUNT];             /* 内环: 速度 → 力矩指令 (Nm), 每个电机独立 */
 uint8_t motor_id_list[MOTOR_COUNT] = {2, 3};  /* 电机 ID 列表 */
+uint16_t motor_offline_cnt[MOTOR_COUNT] = {0};  /* 各电机连续无回复计数 */
+uint32_t prev_reply_error[MOTOR_COUNT] = {0}; /* 上一拍 reply_state_error 快照 */
+
+extern volatile int8_t READ_FLAG;  /* DrMotor.c:38, reply_state 后 =1 成功 / =-1 超时 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -156,6 +161,25 @@ int main(void)
         float torque_cmd = PID_Update(&pid_vel[idx], vel_cmd, motor_state[sidx][1]);
 
         set_torque(id, torque_cmd, 0.0f, 1);
+
+        /* ── 电机离线保护 ──
+         * reply_state_error 只在 reply_state() 超时/ID不匹配时 +1.
+         * 此变量全局共享; 用 prev_reply_error[idx] 快照隔离各电机. */
+        {
+            extern uint32_t reply_state_error;  /* DrMotor.c:46 */
+            if (reply_state_error != prev_reply_error[idx]) {
+                /* 本轮 reply_state 失败了 */
+                if (++motor_offline_cnt[idx] >= OFFLINE_THRESHOLD) {
+                    target[idx] = 0.0f;
+                    PID_Reset(&pid_pos[idx]);
+                    PID_Reset(&pid_vel[idx]);
+                }
+                prev_reply_error[idx] = reply_state_error;
+            } else {
+                motor_offline_cnt[idx] = 0;
+                prev_reply_error[idx] = reply_state_error;  /* 保持同步 */
+            }
+        }
 
         VOFA_justfloat(motor_state[1][0], target[0],
                        motor_state[2][0], target[1],

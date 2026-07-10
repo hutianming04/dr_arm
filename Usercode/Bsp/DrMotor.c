@@ -352,26 +352,19 @@ void reply_state(uint8_t id_num)
         if (READ_FLAG == 1)
         {
             uint8_t rx_id = (uint8_t)((can_id & 0x07E0) >> 5) & 0xFF;
-            if(id_num==0)  //如果ID号为0，则通过解析CAN帧的ID信息确定ID号
+            /* 谁回复就更新谁，不挑食 */
+            if (rx_id > 0 && rx_id <= MOTOR_NUM)
             {
-                id_num = rx_id;
+                float factor = 0.01f;
+                float value_data[3]= {0,0,0};
+                int type_data[3]= {0,2,2};
+                format_data(value_data,type_data,3,"decode");
+                motor_state[rx_id-1][0]=data_list.value_data[0];
+                motor_state[rx_id-1][1]=data_list.value_data[1]*factor;
+                motor_state[rx_id-1][2]=data_list.value_data[2]*factor;
+                motor_state[rx_id -1][3] =(int)((can_id & 0x02) >> 1);
+                motor_state[rx_id -1][4] = (int)((can_id & 0x04) >> 2);
             }
-            else if(rx_id != 0 && rx_id != id_num)
-            {
-                /* 收到其他电机的回复，不是请求的电机，丢弃并报错 */
-                READ_FLAG = -1;
-                reply_state_error += 1;
-                return;
-            }
-            float factor = 0.01f;
-            float value_data[3]= {0,0,0};
-            int type_data[3]= {0,2,2};
-            format_data(value_data,type_data,3,"decode");
-            motor_state[id_num-1][0]=data_list.value_data[0];
-            motor_state[id_num-1][1]=data_list.value_data[1]*factor;
-            motor_state[id_num-1][2]=data_list.value_data[2]*factor;
-            motor_state[id_num -1][3] =(int)((can_id & 0x02) >> 1);
-            motor_state[id_num -1][4] = (int)((can_id & 0x04) >> 2);
         }
         else
         {
