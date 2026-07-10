@@ -26,7 +26,17 @@
       "Bash(ncat -w 2 localhost 4444)",
       "Bash(netstat -ano)",
       "Bash(taskkill /PID 26440 /F)",
-      "Bash(cmd //c \"taskkill /PID 26440 /F\" 2>&1)"
+      "Bash(cmd //c \"taskkill /PID 26440 /F\" 2>&1)",
+      "Bash(cp -r dr_arm dr_arm_v2)",
+      "Bash(rm -rf dr_arm_v2/build dr_arm_v2/.git dr_arm_v2/.pack)",
+      "Bash(sed -i 's/5 电机双环/2 电机双环/' Core/Src/main.c)",
+      "Bash(sed -i '/enable_angle_speed_torque_state\\(4\\);/d' Core/Src/main.c)",
+      "Bash(sed -i 's/每 1ms 只控一个电机, 4ms 一轮 \\(电机 2\\\\/3\\\\/4\\\\/5\\)/每 1ms 只控一个电机, 2ms 一轮 \\(电机 2\\\\/3\\)/' Core/Src/main.c)",
+      "Bash(sed -i '130,140d' Core/Src/main.c)",
+      "Bash(sed -i '161,163d' Core/Src/main.c)",
+      "Bash(sed -i 's/motor_state\\\\[1\\\\]\\\\[0\\\\], motor_state\\\\[2\\\\]\\\\[0\\\\],$/motor_state[1][0], motor_state[1][1],/' Core/Src/main.c)",
+      "Bash(sed -i 's/                       motor_state\\\\[3\\\\]\\\\[0\\\\], torque_cmd,$/                       motor_state[2][0], motor_state[2][1],/' Core/Src/main.c)",
+      "Bash(sed -i 's/                       0, 0, 0, 0, 0, 0\\);$/                       torque_cmd, 0, 0, 0, 0, 0\\);/' Core/Src/main.c)"
     ],
     "additionalDirectories": [
       "D:\\smartcar\\dr_arm\\Usercode\\Star\\Inc"

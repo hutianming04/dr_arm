@@ -1,7 +1,7 @@
 
 
 GraphedExpression="globe_time_ms", DisplayFormat=DISPLAY_FORMAT_DEC, Color=#e56a6f, Show=0
-OpenDocument="main.c", FilePath="d:/smartcar/dr_arm/Core/Src/main.c", Line=70
+OpenDocument="main.c", FilePath="d:/smartcar/dr_arm/Core/Src/main.c", Line=93
 OpenDocument="startup_stm32f103xb.s", FilePath="d:/smartcar/dr_arm/MDK-ARM/startup_stm32f103xb.s", Line=123
 OpenDocument="can.c", FilePath="d:/smartcar/dr_arm/Core/Src/can.c", Line=33
 OpenDocument="star.c", FilePath="d:/smartcar/dr_arm/Usercode/Star/star.c", Line=14
@@ -38,9 +38,10 @@ WatchedExpression="motor_state", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC
 WatchedExpression="can_id", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Window=Watched Data 1
 WatchedExpression="READ_FLAG", RefreshRate=5, DisplayFormat=DISPLAY_FORMAT_DEC, Window=Watched Data 1
 WatchedExpression="huart1", RefreshRate=5, Window=Watched Data 1
-WatchedExpression="rx_buffer", RefreshRate=5, Window=Watched Data 1
+WatchedExpression="rx_buffer", RefreshRate=1, Window=Watched Data 1
 WatchedExpression=" hcan", Window=Watched Data 1
 WatchedExpression="reply_state_error", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="pid_pos", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="pid_vel", RefreshRate=5, Window=Watched Data 1
 WatchedExpression="torque_list", Window=Watched Data 1
+WatchedExpression="data_list", RefreshRate=5, Window=Watched Data 1

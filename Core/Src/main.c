@@ -53,11 +53,11 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-#define MOTOR_COUNT 4
+#define MOTOR_COUNT 2
 float target[MOTOR_COUNT] = {0};              /* 全局目标角度 (°), 每个电机独立 */
 PID_TypeDef pid_pos[MOTOR_COUNT];             /* 外环: 位置 → 速度指令 (r/min), 每个电机独立 */
 PID_TypeDef pid_vel[MOTOR_COUNT];             /* 内环: 速度 → 力矩指令 (Nm), 每个电机独立 */
-uint8_t motor_id_list[MOTOR_COUNT] = {2, 3, 4, 5};  /* 电机 ID 列表 */
+uint8_t motor_id_list[MOTOR_COUNT] = {2, 3};  /* 电机 ID 列表 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,7 +108,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   User_Init();
 
-  /* ── 5 电机双环 PID 初始化 ──
+  /* ── 2 电机双环 PID 初始化 ──
    *
    *  PID 参数默认 0 (Kp=Ki=Kd=0)，限幅和滤波与原有配置一致。
    *  外环 (位置): tau_sp=0(不滤波), tau_d=TAU_ALPHA_08(α=0.8), out=±3600 r/min
@@ -127,18 +127,6 @@ int main(void)
   PID_Init(&pid_vel[1], 0.0f, 0.0f, 0.0f, 0.001f,
            TAU_ALPHA_08, 0.0f, 3600.0f, -3600.0f);
 
-  /* ── 电机 4 (idx=2) ── */
-  PID_Init(&pid_pos[2], 0.0f, 0.0f, 0.0f, 0.001f,
-           0.0f, TAU_ALPHA_08, 3600.0f, -3600.0f);
-  PID_Init(&pid_vel[2], 0.0f, 0.0f, 0.0f, 0.001f,
-           TAU_ALPHA_08, 0.0f, 3600.0f, -3600.0f);
-
-  /* ── 电机 5 (idx=3) ── */
-  PID_Init(&pid_pos[3], 0.0f, 0.0f, 0.0f, 0.001f,
-           0.0f, TAU_ALPHA_08, 3600.0f, -3600.0f);
-  PID_Init(&pid_vel[3], 0.0f, 0.0f, 0.0f, 0.001f,
-           TAU_ALPHA_08, 0.0f, 3600.0f, -3600.0f);
-  enable_angle_speed_torque_state(4);
   
   /* USER CODE END 2 */
 
@@ -150,22 +138,13 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    /* 低速配置任务，不与 1kHz 快循环争抢 CAN 总线 */
-    {
-        static uint32_t last_cfg_ms = 0;
-        if (globe_time_ms - last_cfg_ms >= 100)
-        {
-            last_cfg_ms = globe_time_ms;
-            enable_angle_speed_torque_state(4);
-        }
-    }
-
+    
     if (motor_update_flag)
     {
         motor_update_flag = 0;
         float t = (float)globe_time_ms * 0.001f; /* 秒 */
 
-        /* TDM 轮询: 每 1ms 只控一个电机, 4ms 一轮 (电机 2/3/4/5) */
+        /* TDM 轮询: 每 1ms 只控一个电机, 2ms 一轮 (电机 2/3) */
         uint8_t idx  = globe_time_ms % MOTOR_COUNT;
         uint8_t id   = motor_id_list[idx];
         uint8_t sidx = id - 1;  /* motor_state 索引 */
@@ -178,12 +157,9 @@ int main(void)
 
         set_torque(id, torque_cmd, 0.0f, 1);
 
-        if (id == 4)
-            HAL_Delay(1);  /* 等电机 4 回复帧收完，不干扰电机 5 */
-
-        VOFA_justfloat(target[0], motor_state[1][0],
-                       motor_state[1][1], torque_cmd,
-                       0, 0, 0, 0, 0, 0);
+        VOFA_justfloat(motor_state[1][0], target[0],
+                       motor_state[2][0], target[1],
+                       torque_cmd, 0, 0, 0, 0, 0);
     }
   }
   /* USER CODE END 3 */
