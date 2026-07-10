@@ -52,7 +52,8 @@ void save_config(uint8_t id_num);
 void reboot(uint8_t id_num);
 void position_done(uint8_t id_num);
 void positions_done(uint8_t *id_list,size_t n);
-
+void enable_angle_speed_torque_state(uint8_t id_num);
+void disable_angle_speed_torque_state(uint8_t id_num);
 typedef struct
 {
 

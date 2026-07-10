@@ -1120,6 +1120,7 @@ void set_traj_mode(uint8_t id_num,int mode)
  * @param param_type ��Ҫ��ȡ�����Բ�����������:0-float,1-unsigned short int,2-short int,3-unsigned int,4-int��
  * @param value ��Ӧ������Ŀ��ֵ��
  */
+__attribute__((noinline))
 void write_property(uint8_t id_num,unsigned short param_address,int8_t param_type,float value)
 {
     float value_data[3]= {param_address,param_type,value};
@@ -1416,4 +1417,25 @@ void positions_done(uint8_t *id_list,size_t n)
     {
         position_done(id_list[i]);
     }
+}
+
+/**
+ * @brief 使能关节状态反馈。
+ *
+ * @param id_num 一体化关节 ID 编号,如果不知道当前一体化关节 ID 编号，可以用 0广播，但此时如果总线上有多个一体化关节，会造成总线通信干扰，不可使用 0 广播。
+ *
+ */
+void enable_angle_speed_torque_state(uint8_t id_num)
+{
+	write_property(id_num, 22001, 3, 1);
+}
+/**
+ * @brief 关闭使能关节状态反馈。
+ *
+ * @param id_num 一体化关节 ID 编号,如果不知道当前一体化关节 ID 编号，可以用 0广播，但此时如果总线上有多个一体化关节，会造成总线通信干扰，不可使用 0 广播。
+ *
+ */
+void disable_angle_speed_torque_state(uint8_t id_num)
+{
+	write_property(id_num, 22001, 3, 0);
 }
