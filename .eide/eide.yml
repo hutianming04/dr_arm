@@ -54,6 +54,7 @@ virtualFolder:
                 - path: Usercode/Algorithm/pid.c
                 - path: Usercode/Algorithm/differentiator.c
                 - path: Usercode/Algorithm/impedance.c
+                - path: Usercode/Algorithm/ref_traj.c
               folders:
                 - name: Inc
                   files:
@@ -62,6 +63,7 @@ virtualFolder:
                     - path: Usercode/Algorithm/Inc/filter.h
                     - path: Usercode/Algorithm/Inc/differentiator.h
                     - path: Usercode/Algorithm/Inc/impedance.h
+                    - path: Usercode/Algorithm/Inc/ref_traj.h
                   folders: []
             - name: Star
               files:

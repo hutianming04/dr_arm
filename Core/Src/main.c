@@ -31,6 +31,7 @@
 #include "DrMotor.h"
 #include "pid.h"
 #include "VOFA.h"
+#include "ref_traj.h"
 #include <math.h>
 /* USER CODE END Includes */
 
@@ -121,15 +122,15 @@ int main(void)
    */
 
   /* ── 电机 2 (idx=0) ── */
-  PID_Init(&pid_pos[0], 0.0f, 0.0f, 0.0f, 0.001f,
+  PID_Init(&pid_pos[0], 4.2f, 0.0f, 0.0f, 0.001f,
            0.0f, TAU_ALPHA_08, 3600.0f, -3600.0f);
-  PID_Init(&pid_vel[0], 0.0f, 0.0f, 0.0f, 0.001f,
+  PID_Init(&pid_vel[0], 3.0f, 0.0f, 0.001f, 0.001f,
            TAU_ALPHA_08, 0.0f, 3600.0f, -3600.0f);
 
   /* ── 电机 3 (idx=1) ── */
-  PID_Init(&pid_pos[1], 0.0f, 0.0f, 0.0f, 0.001f,
+  PID_Init(&pid_pos[1], 4.2f, 0.0f, 0.035f, 0.001f,
            0.0f, TAU_ALPHA_08, 3600.0f, -3600.0f);
-  PID_Init(&pid_vel[1], 0.0f, 0.0f, 0.0f, 0.001f,
+  PID_Init(&pid_vel[1], 4.0f, 0.0f, 0.043f, 0.001f,
            TAU_ALPHA_08, 0.0f, 3600.0f, -3600.0f);
 
   
@@ -154,7 +155,9 @@ int main(void)
         uint8_t id   = motor_id_list[idx];
         uint8_t sidx = id - 1;  /* motor_state 索引 */
 
-       // target[idx] = 15.0f * sinf(2.0f * 3.1415926f * 0.1f * t);
+       /* ── 参考轨迹: 关节1→电机2(相移+15°), 关节2→电机3 (按需计算) ── */
+        target[idx] = ref_traj_get_angle(idx + 1, t);
+        if (idx == 0) target[idx] += 15.0f;  /* 电机2 相移 +15° */
 
         /* ── 串级 PID ── */
         float vel_cmd    = PID_Update(&pid_pos[idx], target[idx], motor_state[sidx][0]);
@@ -183,7 +186,7 @@ int main(void)
 
         VOFA_justfloat(motor_state[1][0], target[0],
                        motor_state[2][0], target[1],
-                       torque_cmd, 0, 0, 0, 0, 0);
+                       0, 0, 0, 0, 0, 0);
     }
   }
   /* USER CODE END 3 */
